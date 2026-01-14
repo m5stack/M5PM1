@@ -1384,6 +1384,10 @@ private:
     uint8_t _btnCfg2;
     bool _btnConfigValid;
 
+    // Button flag cache (for BTN_FLAG read-clear handling)
+    // 按钮标志缓存（用于处理 BTN_FLAG 读后清除问题）
+    bool _btnFlagCache;
+
     // IRQ cache
     // IRQ 缓存
     uint8_t _irqMask1;
@@ -1479,6 +1483,10 @@ private:
     // 缓存管理函数
     void _initPinCache();
     void _updatePinCache(m5pm1_gpio_num_t pin);
+
+    // Button status internal function
+    // 按钮状态内部函数
+    bool _readBtnStatus(uint8_t* rawValue);
 };
 
 #endif // _M5PM1_H_

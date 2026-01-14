@@ -135,6 +135,7 @@ M5PM1::M5PM1() {
     _btnCfg1 = 0;
     _btnCfg2 = 0;
     _btnConfigValid = false;
+    _btnFlagCache = false;
     _irqMask1 = 0;
     _irqMask2 = 0;
     _irqMask3 = 0;
@@ -861,6 +862,7 @@ void M5PM1::_clearButtonConfig() {
     _btnCfg1 = 0;
     _btnCfg2 = 0;
     _btnConfigValid = false;
+    _btnFlagCache = false;
 }
 
 void M5PM1::_clearIrqMasks() {
@@ -1134,6 +1136,24 @@ void M5PM1::_autoSnapshotUpdate(uint16_t domains) {
 
 void M5PM1::_initPinCache() {
     _clearPinStates();
+}
+
+bool M5PM1::_readBtnStatus(uint8_t* rawValue) {
+    // Read BTN_STATUS register and update internal BTN_FLAG cache
+    // 读取 BTN_STATUS 寄存器并更新内部 BTN_FLAG 缓存
+    uint8_t val;
+    if (!_readReg(M5PM1_REG_BTN_STATUS, &val)) {
+        return false;
+    }
+    // If BTN_FLAG bit is set, accumulate to cache
+    // 如果 BTN_FLAG 位被置位，累积到缓存
+    if (val & 0x80) {
+        _btnFlagCache = true;
+    }
+    if (rawValue) {
+        *rawValue = val;
+    }
+    return true;
 }
 
 bool M5PM1::_writeReg(uint8_t reg, uint8_t value) {
@@ -2545,7 +2565,9 @@ m5pm1_err_t M5PM1::btnGetState(bool* pressed) {
         return M5PM1_ERR_NOT_INIT;
     }
     uint8_t val;
-    if (!_readReg(M5PM1_REG_BTN_STATUS, &val)) return M5PM1_ERR_I2C_COMM;
+    // Use internal function to read register and maintain BTN_FLAG cache
+    // 使用内部函数读取寄存器并维护 BTN_FLAG 缓存
+    if (!_readBtnStatus(&val)) return M5PM1_ERR_I2C_COMM;
     *pressed = (val & 0x01) != 0;
     return M5PM1_OK;
 }
@@ -2557,8 +2579,18 @@ m5pm1_err_t M5PM1::btnGetFlag(bool* wasPressed) {
         return M5PM1_ERR_NOT_INIT;
     }
     uint8_t val;
-    if (!_readReg(M5PM1_REG_BTN_STATUS, &val)) return M5PM1_ERR_I2C_COMM;
-    *wasPressed = (val & 0x80) != 0;
+    // Use internal function to read register and update BTN_FLAG cache
+    // 使用内部函数读取寄存器并更新 BTN_FLAG 缓存
+    if (!_readBtnStatus(&val)) return M5PM1_ERR_I2C_COMM;
+    
+    // Check if BTN_FLAG was set (either from this read or cached from previous reads)
+    // 检查 BTN_FLAG 是否被置位（无论是本次读取还是之前缓存的）
+    *wasPressed = _btnFlagCache;
+    
+    // Clear cache after reporting (consume the flag)
+    // 报告后清除缓存（消耗该标志）
+    _btnFlagCache = false;
+    
     return M5PM1_OK;
 }
 
@@ -4132,7 +4164,7 @@ m5pm1_err_t M5PM1::getCachedIrqMasks(uint8_t* mask1, uint8_t* mask2, uint8_t* ma
 m5pm1_err_t M5PM1::getCachedIrqStatus(uint8_t* status1, uint8_t* status2, uint8_t* status3) {
     if (status1 == nullptr || status2 == nullptr || status3 == nullptr) return M5PM1_ERR_INVALID_ARG;
     if (!_irqStatusValid) return M5PM1_FAIL;
-
+ 
     *status1 = _irqStatus1;
     *status2 = _irqStatus2;
     *status3 = _irqStatus3;
