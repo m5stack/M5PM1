@@ -1,0 +1,9 @@
+idf_component_register(
+    SRCS
+        "src/M5PM1.cpp"
+    INCLUDE_DIRS
+        "src"
+    REQUIRES
+        "driver"
+        "espressif__i2c_bus"
+)
