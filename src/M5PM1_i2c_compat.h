@@ -109,7 +109,7 @@ static inline void M5PM1_I2C_SEND_WAKE(TwoWire *wire, uint8_t addr) {
     // Send START signal to generate SDA falling edge for PM1 wake
     // PM1 uses SDA pin (PB4) falling edge to trigger EXTI4 interrupt for wakeup
     wire->beginTransmission(addr);
-    wire->endTransmission(false);  // Send START without STOP
+    wire->endTransmission();  // Send START with STOP
 }
 #endif
 

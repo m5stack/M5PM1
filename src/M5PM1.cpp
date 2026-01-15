@@ -1411,10 +1411,6 @@ m5pm1_err_t M5PM1::getSwVersion(uint8_t* version) {
     return M5PM1_OK;
 }
 
-m5pm1_err_t M5PM1::getVersion(uint8_t* version) {
-    return getSwVersion(version);
-}
-
 // ============================
 // GPIO 功能 (Arduino风格 - 带返回值)
 // GPIO Functions (Arduino-style - WithRes)
@@ -1692,6 +1688,37 @@ m5pm1_err_t M5PM1::gpioSetWakeEnable(m5pm1_gpio_num_t pin, bool enable) {
     if (!_initialized) {
         M5PM1_LOG_E(TAG, "Not initialized");
         return M5PM1_ERR_NOT_INIT;
+    }
+
+    // WAKE 互斥校验（仅在启用时检查）
+    // WAKE mutual exclusion check (only when enabling)
+    if (enable) {
+        // GPIO1 不支持 WAKE（与 SDA 共用中断线）
+        // GPIO1 does not support WAKE (shares interrupt line with SDA)
+        if (pin == M5PM1_GPIO_NUM_1) {
+            M5PM1_LOG_E(TAG, "GPIO1 does not support WAKE");
+            return M5PM1_ERR_RULE_VIOLATION;
+        }
+        // GPIO0/GPIO2 WAKE 互斥（共用中断线）
+        // GPIO0/GPIO2 WAKE mutual exclusion (share interrupt line)
+        if (pin == M5PM1_GPIO_NUM_0 && _hasActiveWake(M5PM1_GPIO_NUM_2)) {
+            M5PM1_LOG_E(TAG, "GPIO0/GPIO2 WAKE conflict: GPIO2 already enabled");
+            return M5PM1_ERR_RULE_VIOLATION;
+        }
+        if (pin == M5PM1_GPIO_NUM_2 && _hasActiveWake(M5PM1_GPIO_NUM_0)) {
+            M5PM1_LOG_E(TAG, "GPIO0/GPIO2 WAKE conflict: GPIO0 already enabled");
+            return M5PM1_ERR_RULE_VIOLATION;
+        }
+        // GPIO3/GPIO4 WAKE 互斥（共用中断线）
+        // GPIO3/GPIO4 WAKE mutual exclusion (share interrupt line)
+        if (pin == M5PM1_GPIO_NUM_3 && _hasActiveWake(M5PM1_GPIO_NUM_4)) {
+            M5PM1_LOG_E(TAG, "GPIO3/GPIO4 WAKE conflict: GPIO4 already enabled");
+            return M5PM1_ERR_RULE_VIOLATION;
+        }
+        if (pin == M5PM1_GPIO_NUM_4 && _hasActiveWake(M5PM1_GPIO_NUM_3)) {
+            M5PM1_LOG_E(TAG, "GPIO3/GPIO4 WAKE conflict: GPIO3 already enabled");
+            return M5PM1_ERR_RULE_VIOLATION;
+        }
     }
 
     uint8_t regVal;
@@ -2228,6 +2255,42 @@ m5pm1_err_t M5PM1::setPwmDuty12bit(m5pm1_pwm_channel_t channel, uint16_t duty12,
     return M5PM1_OK;
 }
 
+m5pm1_err_t M5PM1::setPwmConfig(m5pm1_pwm_channel_t channel, bool enable, bool polarity,
+                                uint16_t frequency, uint16_t duty12) {
+    if (channel > M5PM1_PWM_CH_1 || duty12 > 0x0FFF) {
+        M5PM1_LOG_E(TAG, "Invalid PWM config: ch=%d duty12=%d", channel, duty12);
+        return M5PM1_ERR_INVALID_ARG;
+    }
+    if (!_initialized) {
+        M5PM1_LOG_E(TAG, "Not initialized");
+        return M5PM1_ERR_NOT_INIT;
+    }
+
+    uint8_t pin = (channel == M5PM1_PWM_CH_0) ? M5PM1_GPIO_NUM_3 : M5PM1_GPIO_NUM_4;
+
+    m5pm1_validation_t validation = validateConfig(pin, M5PM1_CONFIG_PWM, enable);
+    if (!validation.valid) {
+        M5PM1_LOG_W(TAG, "PWM config warning on GPIO%d: %s", pin, validation.error_msg);
+    }
+
+    if (_cacheValid && _pinStatus[pin].func != M5PM1_GPIO_FUNC_OTHER) {
+        M5PM1_LOG_W(TAG, "GPIO%d not configured for PWM function (OTHER mode)", pin);
+    }
+
+    if (_pwmStatesValid && _pwmFrequency != frequency) {
+        m5pm1_pwm_channel_t other =
+            (channel == M5PM1_PWM_CH_0) ? M5PM1_PWM_CH_1 : M5PM1_PWM_CH_0;
+        if (_pwmStates[other].enabled) {
+            M5PM1_LOG_W(TAG, "PWM frequency change affects other channel: %d -> %d",
+                       _pwmFrequency, frequency);
+        }
+    }
+
+    m5pm1_err_t err = setPwmDuty12bit(channel, duty12, polarity, enable);
+    if (err != M5PM1_OK) return err;
+    return setPwmFrequency(frequency);
+}
+
 m5pm1_err_t M5PM1::getPwmDuty12bit(m5pm1_pwm_channel_t channel, uint16_t* duty12,
                                   bool* polarity, bool* enable) {
     if (channel > M5PM1_PWM_CH_1 || duty12 == nullptr || polarity == nullptr || enable == nullptr) {
@@ -2440,12 +2503,23 @@ m5pm1_err_t M5PM1::setLedControlEnable(bool enable) {
 // ============================
 
 m5pm1_err_t M5PM1::setBatteryLvp(uint16_t mv) {
+    // Check if initialized / 检查初始化状态
     if (!_initialized) {
         M5PM1_LOG_E(TAG, "Not initialized");
         return M5PM1_ERR_NOT_INIT;
     }
-    // LVP value = (voltage_mv - 2000) / 7.81
-    uint8_t lvp = (uint8_t)((mv - 2000) / 7.81f);
+
+    // Validate voltage range / 验证电压范围 (2000-4000 mV)
+    if (mv < 2000 || mv > 4000) {
+        M5PM1_LOG_E(TAG, "Invalid battery LVP value: %u mV (valid range: 2000-4000 mV)", mv);
+        return M5PM1_ERR_INVALID_ARG;
+    }
+
+    // Calculate register value / 计算寄存器值
+    // Formula: (voltage_mv - 2000) / 7.81 ≈ (voltage_mv - 2000) * 100 / 781
+    // 公式: (电压_mV - 2000) / 7.81 ≈ (电压_mV - 2000) * 100 / 781
+    uint8_t lvp = (uint8_t)((mv - 2000) * 100 / 781);
+
     if (!_writeReg(M5PM1_REG_BATT_LVP, lvp)) return M5PM1_ERR_I2C_COMM;
     return M5PM1_OK;
 }
@@ -2489,11 +2563,19 @@ m5pm1_err_t M5PM1::wdtGetCount(uint8_t* count) {
 // ============================
 
 m5pm1_err_t M5PM1::timerSet(uint32_t seconds, m5pm1_tim_action_t action, bool autoRearm) {
+    // Check if initialized / 检查初始化状态
     if (!_initialized) {
         M5PM1_LOG_E(TAG, "Not initialized");
         return M5PM1_ERR_NOT_INIT;
     }
-    // Write 31-bit timer value
+
+    // Validate timer count / 验证定时器计数值 (31-bit: 0-0x7FFFFFFF)
+    if (seconds > 0x7FFFFFFF) {
+        M5PM1_LOG_E(TAG, "Invalid timer count: %lu (max 0x7FFFFFFF, ~68 years)", seconds);
+        return M5PM1_ERR_INVALID_ARG;
+    }
+
+    // Write 31-bit timer value / 写入31位定时器值
     uint8_t data[4];
     data[0] = (seconds >> 0) & 0xFF;
     data[1] = (seconds >> 8) & 0xFF;
@@ -2502,13 +2584,13 @@ m5pm1_err_t M5PM1::timerSet(uint32_t seconds, m5pm1_tim_action_t action, bool au
 
     if (!_writeBytes(M5PM1_REG_TIM_CNT_0, data, 4)) return M5PM1_ERR_I2C_COMM;
 
-    // Configure timer
+    // Configure timer / 配置定时器
     uint8_t cfg = (uint8_t)action;
     if (autoRearm) cfg |= 0x08;
 
     if (!_writeReg(M5PM1_REG_TIM_CFG, cfg)) return M5PM1_ERR_I2C_COMM;
 
-    // Reload timer
+    // Reload timer / 重载定时器
     if (!_writeReg(M5PM1_REG_TIM_KEY, M5PM1_TIM_RELOAD_KEY)) return M5PM1_ERR_I2C_COMM;
     return M5PM1_OK;
 }
@@ -2528,13 +2610,13 @@ m5pm1_err_t M5PM1::timerClear() {
 // ============================
 
 m5pm1_err_t M5PM1::btnSetConfig(m5pm1_btn_type_t type, m5pm1_btn_delay_t delay) {
+    // Check if initialized / 检查初始化状态
     if (!_initialized) {
         M5PM1_LOG_E(TAG, "Not initialized");
         return M5PM1_ERR_NOT_INIT;
     }
-    uint8_t regVal;
-    if (!_readReg(M5PM1_REG_BTN_CFG_1, &regVal)) return M5PM1_ERR_I2C_COMM;
 
+    // Validate button type / 验证按钮类型
     uint8_t shift;
     switch (type) {
         case M5PM1_BTN_TYPE_CLICK:
@@ -2547,9 +2629,21 @@ m5pm1_err_t M5PM1::btnSetConfig(m5pm1_btn_type_t type, m5pm1_btn_delay_t delay) 
             shift = 5;
             break;
         default:
+            M5PM1_LOG_E(TAG, "Invalid button type: %d", type);
             return M5PM1_ERR_INVALID_ARG;
     }
 
+    // Validate delay configuration / 验证延迟配置 (0-3)
+    if (delay > M5PM1_BTN_DELAY_1000MS) {
+        M5PM1_LOG_E(TAG, "Invalid delay value: %d (valid range: 0-3)", delay);
+        return M5PM1_ERR_INVALID_ARG;
+    }
+
+    // Read current register value / 读取当前寄存器值
+    uint8_t regVal;
+    if (!_readReg(M5PM1_REG_BTN_CFG_1, &regVal)) return M5PM1_ERR_I2C_COMM;
+
+    // Update delay bits / 更新延迟位
     regVal &= ~(0x03 << shift);
     regVal |= ((uint8_t)delay << shift);
 
@@ -4009,6 +4103,41 @@ m5pm1_validation_t M5PM1::validateConfig(uint8_t pin, m5pm1_config_type_t config
             break;
 
         case M5PM1_CONFIG_GPIO_WAKE:
+            // GPIO1 不支持 WAKE（与 SDA 共用中断线）
+            // GPIO1 does not support WAKE (shares interrupt line with SDA)
+            if (pin == M5PM1_GPIO_NUM_1) {
+                snprintf(result.error_msg, sizeof(result.error_msg),
+                         "GPIO1 does not support WAKE");
+                return result;
+            }
+            // GPIO0/GPIO2 WAKE 互斥（共用中断线）
+            // GPIO0/GPIO2 WAKE mutual exclusion (share interrupt line)
+            if (pin == M5PM1_GPIO_NUM_0 && _hasActiveWake(M5PM1_GPIO_NUM_2)) {
+                snprintf(result.error_msg, sizeof(result.error_msg),
+                         "GPIO0/GPIO2 WAKE conflict");
+                result.conflicting_pin = M5PM1_GPIO_NUM_2;
+                return result;
+            }
+            if (pin == M5PM1_GPIO_NUM_2 && _hasActiveWake(M5PM1_GPIO_NUM_0)) {
+                snprintf(result.error_msg, sizeof(result.error_msg),
+                         "GPIO0/GPIO2 WAKE conflict");
+                result.conflicting_pin = M5PM1_GPIO_NUM_0;
+                return result;
+            }
+            // GPIO3/GPIO4 WAKE 互斥（共用中断线）
+            // GPIO3/GPIO4 WAKE mutual exclusion (share interrupt line)
+            if (pin == M5PM1_GPIO_NUM_3 && _hasActiveWake(M5PM1_GPIO_NUM_4)) {
+                snprintf(result.error_msg, sizeof(result.error_msg),
+                         "GPIO3/GPIO4 WAKE conflict");
+                result.conflicting_pin = M5PM1_GPIO_NUM_4;
+                return result;
+            }
+            if (pin == M5PM1_GPIO_NUM_4 && _hasActiveWake(M5PM1_GPIO_NUM_3)) {
+                snprintf(result.error_msg, sizeof(result.error_msg),
+                         "GPIO3/GPIO4 WAKE conflict");
+                result.conflicting_pin = M5PM1_GPIO_NUM_3;
+                return result;
+            }
             if (_hasActivePwm(pin)) {
                 snprintf(result.error_msg, sizeof(result.error_msg),
                          "Pin %d is used for PWM", pin);

@@ -152,8 +152,8 @@ typedef enum {
                                             //       电池低压保护阈值
                                             //       Value = (voltage_mV - 2000) / 7.81
                                             //       电压(mV) = 2000 + n * 7.81
-                                            //       Range: 2000mV ~ 3990mV
-                                            //       范围：2000mV ~ 3990mV
+                                            //       Range: 2000mV ~ 4000mV
+                                            //       范围：2000mV ~ 4000mV
 
 #define M5PM1_REG_I2C_CFG           0x09    // R/W   I2C configuration / I2C配置
                                             //       [7-5] Reserved 保留
@@ -229,7 +229,7 @@ typedef enum {
 #define M5PM1_REG_ADC_CTRL          0x2A    // R/W   ADC control / ADC控制
                                             //       [7-4] Reserved 保留
                                             //       [3:1] Channel
-                                            //       通道: 1=ADC1(GPIO1) 2=ADC2(GPIO2) 6=温度
+                                            //       通道: 1=ADC1(GPIO1) 2=ADC2(GPIO2) 6=芯片内部温度
                                             //       [0] START - 写1启动转换
                                             //       Write 1 to start conversion
 
@@ -312,7 +312,7 @@ typedef enum {
                                             //       [6-1] Reserved 保留
                                             //       [0] BTN_STATE - 当前按钮状态: 0=释放 1=按下
 #define M5PM1_REG_BTN_CFG_1           0x49    // R/W   Button configuration / 按钮配置
-                                            //       [7] Reserved 保留
+                                            //       [7] DL_LOCK - 下载模式锁定: 0=正常 1=锁定（禁止进入下载模式）
                                             //       [6:5] LONG_DLY - 长按延时: 00=125ms 01=250ms 10=500ms 11=1s
                                             //       [4:3] DBL_DLY - 双击间隔: 00=125ms 01=250ms 10=500ms 11=1s
                                             //       [2:1] CLK_DLY - 单击延时: 00=125ms 01=250ms 10=500ms 11=1s
@@ -923,7 +923,6 @@ public:
     m5pm1_err_t getDeviceModel(uint8_t* model);
     m5pm1_err_t getHwVersion(uint8_t* version);
     m5pm1_err_t getSwVersion(uint8_t* version);
-    m5pm1_err_t getVersion(uint8_t* version);
 
     // ========================
     // GPIO 功能 (Arduino风格 - 带返回值)
@@ -1037,6 +1036,26 @@ public:
                                bool polarity = false, bool enable = true);
     m5pm1_err_t getPwmDuty12bit(m5pm1_pwm_channel_t channel, uint16_t* duty12,
                                bool* polarity, bool* enable);
+    /**
+     * @brief Configure PWM in one call
+     *        一次性配置 PWM 参数
+     * @param channel PWM channel (0-1)
+     *               PWM 通道（0-1）
+     * @param enable Enable output (true=enable, false=disable)
+     *              输出使能（true=启用，false=禁用）
+     * @param polarity Polarity (false=normal, true=inverted)
+     *                极性（false=正常，true=反相）
+     * @param frequency PWM frequency in Hz (0-65535, shared by all channels)
+     *                  PWM 频率（0-65535，全通道共享）
+     * @param duty12 12-bit duty (0-4095)
+     *               12 位占空比（0-4095）
+     * @note This API warns on conflicts but still applies settings
+     *       此 API 对冲突仅告警，仍会继续配置
+     * @note Changing frequency affects all channels
+     *       变更频率会影响所有通道
+     */
+    m5pm1_err_t setPwmConfig(m5pm1_pwm_channel_t channel, bool enable, bool polarity,
+                            uint16_t frequency, uint16_t duty12);
     m5pm1_err_t analogWrite(m5pm1_pwm_channel_t channel, uint8_t value);
 
     // ========================
