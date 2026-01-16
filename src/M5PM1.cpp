@@ -696,11 +696,21 @@ m5pm1_err_t M5PM1::begin(i2c_bus_handle_t bus, uint8_t addr, uint32_t speed) {
 
 bool M5PM1::_initDevice() {
     // Verify device ID
-    uint8_t id;
-    if (!_readReg(M5PM1_REG_DEVICE_ID, &id)) {
+    uint8_t id = 0;
+    uint8_t model = 0;
+    uint8_t hw = 0;
+    uint8_t sw = 0;
+    if (!_readReg(M5PM1_REG_DEVICE_ID, &id) ||
+        !_readReg(M5PM1_REG_DEVICE_MODEL, &model) ||
+        !_readReg(M5PM1_REG_HW_REV, &hw) ||
+        !_readReg(M5PM1_REG_SW_REV, &sw)) {
         return false;
     }
-    M5PM1_LOG_I(TAG, "Device ID: 0x%02X", id);
+    if (sw >= 'A' && sw <= 'Z') {
+        M5PM1_LOG_I(TAG, "Device: ID=0x%02X MODEL=0x%02X HW=0x%02X SW=0x%02X(%c)", id, model, hw, sw, sw);
+    } else {
+        M5PM1_LOG_I(TAG, "Device: ID=0x%02X MODEL=0x%02X HW=0x%02X SW=0x%02X", id, model, hw, sw);
+    }
 
     _clearAll();
 
