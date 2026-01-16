@@ -128,7 +128,7 @@ typedef enum {
 // ---- Power Configuration ----
 // ---- 电源配置 ----
 #define M5PM1_REG_PWR_CFG           0x06    // R/W   [7-5] Reserved 保留
-                                            //       [4] LED_CONTROL - LED控制权: 0=PM1控制 1=外部MCU控制
+                                            //       [4] LED_EN 默认电平状态: 0=低电平 1=高电平
                                             //       [3] 5V_INOUT - 5V双向端口: 0=输入模式 1=输出模式(由DCDC供电)
                                             //       [2] LDO_EN - 3.3V LDO使能: 0=关闭 1=开启
                                             //       [1] DCDC_EN - 5V DCDC使能: 0=关闭 1=开启
@@ -757,8 +757,8 @@ typedef enum {
                                         // 3.3V LDO enable
     M5PM1_PWR_CFG_5V_INOUT = (1 << 3),  // 5V 双向端口模式
                                         // 5V bidirectional port mode
-    M5PM1_PWR_CFG_LED_CTRL = (1 << 4)   // LED 控制权
-                                        // LED control
+    M5PM1_PWR_CFG_LED_CTRL = (1 << 4)   // LED_EN 默认电平状态 0:低电平 1:高电平
+                                        // LED_EN default level state 0: low 1: high
 } m5pm1_pwr_cfg_t;
 
 // ============================
