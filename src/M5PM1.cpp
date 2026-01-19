@@ -1752,6 +1752,13 @@ m5pm1_err_t M5PM1::gpioSetWakeEdge(m5pm1_gpio_num_t pin, m5pm1_gpio_wake_edge_t 
         return M5PM1_ERR_NOT_INIT;
     }
 
+    // GPIO1 不支持唤醒边沿配置
+    // GPIO1 does not support wake edge configuration
+    if (pin == M5PM1_GPIO_NUM_1) {
+        M5PM1_LOG_E(TAG, "GPIO1 does not support wake edge configuration");
+        return M5PM1_ERR_INVALID_ARG;
+    }
+
     uint8_t regVal;
     if (!_readReg(M5PM1_REG_GPIO_WAKE_CFG, &regVal)) return M5PM1_ERR_I2C_COMM;
 
@@ -1856,6 +1863,135 @@ m5pm1_err_t M5PM1::dumpPinStatus() {
     M5PM1_LOG_I(TAG, "======================");
 
     return M5PM1_OK;
+}
+
+m5pm1_err_t M5PM1::verifyPinConfig(bool enableLog) {
+    if (!_initialized) {
+        M5PM1_LOG_E(TAG, "Not initialized");
+        return M5PM1_ERR_NOT_INIT;
+    }
+
+    // 读取所有GPIO相关寄存器
+    // Read all GPIO-related registers
+    uint8_t mode, out, drv, pupd0, pupd1, func0, func1, wakeEn, wakeCfg, holdCfg;
+
+    if (!_readReg(M5PM1_REG_GPIO_MODE, &mode)) return M5PM1_ERR_I2C_COMM;
+    if (!_readReg(M5PM1_REG_GPIO_OUT, &out)) return M5PM1_ERR_I2C_COMM;
+    if (!_readReg(M5PM1_REG_GPIO_DRV, &drv)) return M5PM1_ERR_I2C_COMM;
+    if (!_readReg(M5PM1_REG_GPIO_PUPD0, &pupd0)) return M5PM1_ERR_I2C_COMM;
+    if (!_readReg(M5PM1_REG_GPIO_PUPD1, &pupd1)) return M5PM1_ERR_I2C_COMM;
+    if (!_readReg(M5PM1_REG_GPIO_FUNC0, &func0)) return M5PM1_ERR_I2C_COMM;
+    if (!_readReg(M5PM1_REG_GPIO_FUNC1, &func1)) return M5PM1_ERR_I2C_COMM;
+    if (!_readReg(M5PM1_REG_GPIO_WAKE_EN, &wakeEn)) return M5PM1_ERR_I2C_COMM;
+    if (!_readReg(M5PM1_REG_GPIO_WAKE_CFG, &wakeCfg)) return M5PM1_ERR_I2C_COMM;
+    if (!_readReg(M5PM1_REG_HOLD_CFG, &holdCfg)) return M5PM1_ERR_I2C_COMM;
+
+    bool hasError = false;
+
+    // 逐个引脚比对
+    // Compare pin by pin
+    for (int pin = 0; pin < M5PM1_MAX_GPIO_PINS; pin++) {
+        if (!_cacheValid) {
+            if (enableLog) {
+                M5PM1_LOG_W(TAG, "GPIO%d: Cache invalid, skipping verification", pin);
+            }
+            continue;
+        }
+
+        const m5pm1_pin_status_t& cached = _pinStatus[pin];
+
+        // 检查 MODE
+        m5pm1_gpio_mode_t actualMode = (mode & (1 << pin)) ? M5PM1_GPIO_MODE_OUTPUT : M5PM1_GPIO_MODE_INPUT;
+        if (cached.mode != actualMode) {
+            hasError = true;
+            if (enableLog) {
+                M5PM1_LOG_W(TAG, "GPIO%d MODE mismatch: cached=%d actual=%d", pin, cached.mode, actualMode);
+            }
+        }
+
+        // 检查 OUTPUT (仅输出模式)
+        if (actualMode == M5PM1_GPIO_MODE_OUTPUT) {
+            uint8_t actualOut = (out >> pin) & 0x01;
+            if (cached.output != actualOut) {
+                hasError = true;
+                if (enableLog) {
+                    M5PM1_LOG_W(TAG, "GPIO%d OUT mismatch: cached=%d actual=%d", pin, cached.output, actualOut);
+                }
+            }
+        }
+
+        // 检查 DRIVE
+        m5pm1_gpio_drive_t actualDrive = (drv & (1 << pin)) ? M5PM1_GPIO_DRIVE_OPENDRAIN : M5PM1_GPIO_DRIVE_PUSHPULL;
+        if (cached.drive != actualDrive) {
+            hasError = true;
+            if (enableLog) {
+                M5PM1_LOG_W(TAG, "GPIO%d DRIVE mismatch: cached=%d actual=%d", pin, cached.drive, actualDrive);
+            }
+        }
+
+        // 检查 PULL
+        m5pm1_gpio_pull_t actualPull;
+        if (pin < 4) {
+            actualPull = (m5pm1_gpio_pull_t)((pupd0 >> (pin * 2)) & 0x03);
+        } else {
+            actualPull = (m5pm1_gpio_pull_t)((pupd1 >> 0) & 0x03);
+        }
+        if (cached.pull != actualPull) {
+            hasError = true;
+            if (enableLog) {
+                M5PM1_LOG_W(TAG, "GPIO%d PULL mismatch: cached=%d actual=%d", pin, cached.pull, actualPull);
+            }
+        }
+
+        // 检查 FUNC
+        m5pm1_gpio_func_t actualFunc;
+        if (pin < 4) {
+            actualFunc = (m5pm1_gpio_func_t)((func0 >> (pin * 2)) & 0x03);
+        } else {
+            actualFunc = (m5pm1_gpio_func_t)((func1 >> 0) & 0x03);
+        }
+        if (cached.func != actualFunc) {
+            hasError = true;
+            if (enableLog) {
+                M5PM1_LOG_W(TAG, "GPIO%d FUNC mismatch: cached=%d actual=%d", pin, cached.func, actualFunc);
+            }
+        }
+
+        // 检查 WAKE_EN
+        bool actualWakeEn = (wakeEn & (1 << pin)) != 0;
+        if (cached.wake_en != actualWakeEn) {
+            hasError = true;
+            if (enableLog) {
+                M5PM1_LOG_W(TAG, "GPIO%d WAKE_EN mismatch: cached=%d actual=%d", pin, cached.wake_en, actualWakeEn);
+            }
+        }
+
+        // 检查 WAKE_EDGE
+        m5pm1_gpio_wake_edge_t actualWakeEdge = (wakeCfg & (1 << pin)) ? M5PM1_GPIO_WAKE_RISING : M5PM1_GPIO_WAKE_FALLING;
+        if (cached.wake_edge != actualWakeEdge) {
+            hasError = true;
+            if (enableLog) {
+                M5PM1_LOG_W(TAG, "GPIO%d WAKE_EDGE mismatch: cached=%d actual=%d", pin, cached.wake_edge, actualWakeEdge);
+            }
+        }
+
+        // 检查 POWER_HOLD
+        bool actualPowerHold = (holdCfg & (1 << pin)) != 0;
+        if (cached.power_hold != actualPowerHold) {
+            hasError = true;
+            if (enableLog) {
+                M5PM1_LOG_W(TAG, "GPIO%d POWER_HOLD mismatch: cached=%d actual=%d", pin, cached.power_hold, actualPowerHold);
+            }
+        }
+    }
+
+    // 更新缓存为实际值
+    // Update cache with actual values
+    if (hasError || !_cacheValid) {
+        _snapshotPinStates();
+    }
+
+    return hasError ? M5PM1_ERR_VERIFY_FAILED : M5PM1_OK;
 }
 
 m5pm1_err_t M5PM1::getPinStatus(m5pm1_gpio_num_t pin, m5pm1_pin_status_t* status) {
@@ -2435,13 +2571,14 @@ m5pm1_err_t M5PM1::getWakeSource(uint8_t* src, m5pm1_clean_type_t cleanType) {
     if (!_readReg(M5PM1_REG_WAKE_SRC, src)) return M5PM1_ERR_I2C_COMM;
 
     if (cleanType == M5PM1_CLEAN_TRIGGERED && *src != 0) {
-        // 清除已触发的位
-        // Clear triggered bits
-        if (!_writeReg(M5PM1_REG_WAKE_SRC, *src)) return M5PM1_ERR_I2C_COMM;
+        // 清除已触发的位（采用"写0清除"机制）
+        // Clear triggered bits (using "write-0-to-clear" mechanism)
+        uint8_t new_val = ~(*src);  // 反转位：触发位变为0，未触发位变为1
+        if (!_writeReg(M5PM1_REG_WAKE_SRC, new_val)) return M5PM1_ERR_I2C_COMM;
     } else if (cleanType == M5PM1_CLEAN_ALL) {
-        // 清除所有位
-        // Clear all bits
-        if (!_writeReg(M5PM1_REG_WAKE_SRC, 0x7F)) return M5PM1_ERR_I2C_COMM;
+        // 清除所有位（采用"写0清除"机制：写入0x00）
+        // Clear all bits (using "write-0-to-clear" mechanism: write 0x00)
+        if (!_writeReg(M5PM1_REG_WAKE_SRC, 0x00)) return M5PM1_ERR_I2C_COMM;
     }
     return M5PM1_OK;
 }
@@ -2451,7 +2588,18 @@ m5pm1_err_t M5PM1::clearWakeSource(uint8_t mask) {
         M5PM1_LOG_E(TAG, "Not initialized");
         return M5PM1_ERR_NOT_INIT;
     }
-    if (!_writeReg(M5PM1_REG_WAKE_SRC, mask)) return M5PM1_ERR_I2C_COMM;
+
+    // PM1芯片采用"写0清除"机制：读取当前值，清除mask中为1的位，写回
+    // PM1 chip uses "write-0-to-clear" mechanism: read, clear bits in mask, write back
+    uint8_t wake_src;
+    if (!_readReg(M5PM1_REG_WAKE_SRC, &wake_src)) {
+        return M5PM1_ERR_I2C_COMM;
+    }
+    uint8_t new_val = wake_src & ~mask;
+    if (!_writeReg(M5PM1_REG_WAKE_SRC, new_val)) {
+        return M5PM1_ERR_I2C_COMM;
+    }
+
     return M5PM1_OK;
 }
 
@@ -2576,7 +2724,7 @@ m5pm1_err_t M5PM1::wdtGetCount(uint8_t* count) {
 // Timer Functions
 // ============================
 
-m5pm1_err_t M5PM1::timerSet(uint32_t seconds, m5pm1_tim_action_t action, bool autoRearm) {
+m5pm1_err_t M5PM1::timerSet(uint32_t seconds, m5pm1_tim_action_t action) {
     // Check if initialized / 检查初始化状态
     if (!_initialized) {
         M5PM1_LOG_E(TAG, "Not initialized");
@@ -2599,8 +2747,9 @@ m5pm1_err_t M5PM1::timerSet(uint32_t seconds, m5pm1_tim_action_t action, bool au
     if (!_writeBytes(M5PM1_REG_TIM_CNT_0, data, 4)) return M5PM1_ERR_I2C_COMM;
 
     // Configure timer / 配置定时器
-    uint8_t cfg = (uint8_t)action;
-    if (autoRearm) cfg |= 0x08;
+    // bit[3] ARM=1: 启动定时器 / Start timer
+    // bit[2:0] ACTION: 定时器动作 / Timer action
+    uint8_t cfg = 0x08 | (uint8_t)action;  // ARM=1, set ACTION
 
     if (!_writeReg(M5PM1_REG_TIM_CFG, cfg)) return M5PM1_ERR_I2C_COMM;
 
@@ -2614,7 +2763,14 @@ m5pm1_err_t M5PM1::timerClear() {
         M5PM1_LOG_E(TAG, "Not initialized");
         return M5PM1_ERR_NOT_INIT;
     }
+    // 清除定时器配置（停止计数）
+    // Clear timer configuration (stop counting)
     if (!_writeReg(M5PM1_REG_TIM_CFG, 0)) return M5PM1_ERR_I2C_COMM;
+
+    // 写入密钥以清除并重载定时器（与旧库行为一致）
+    // Write key to clear and reload timer (consistent with old library behavior)
+    if (!_writeReg(M5PM1_REG_TIM_KEY, M5PM1_TIM_RELOAD_KEY)) return M5PM1_ERR_I2C_COMM;
+
     return M5PM1_OK;
 }
 
@@ -2676,7 +2832,9 @@ m5pm1_err_t M5PM1::btnGetState(bool* pressed) {
     // Use internal function to read register and maintain BTN_FLAG cache
     // 使用内部函数读取寄存器并维护 BTN_FLAG 缓存
     if (!_readBtnStatus(&val)) return M5PM1_ERR_I2C_COMM;
-    *pressed = (val & 0x01) != 0;
+    // bit0: 0=按下, 1=松开
+    // bit0: 0=pressed, 1=released
+    *pressed = (val & 0x01) == 0;
     return M5PM1_OK;
 }
 
@@ -2793,13 +2951,14 @@ m5pm1_err_t M5PM1::irqGetGpioStatus(uint8_t* status, m5pm1_clean_type_t cleanTyp
     if (!_readReg(M5PM1_REG_IRQ_STATUS1, status)) return M5PM1_ERR_I2C_COMM;
 
     if (cleanType == M5PM1_CLEAN_TRIGGERED && *status != 0) {
-        // 清除已触发的位
-        // Clear triggered bits
-        if (!_writeReg(M5PM1_REG_IRQ_STATUS1, *status)) return M5PM1_ERR_I2C_COMM;
+        // 清除已触发的位（采用"写0清除"机制）
+        // Clear triggered bits (using "write-0-to-clear" mechanism)
+        uint8_t new_val = ~(*status);  // 反转位：触发位变为0，未触发位变为1
+        if (!_writeReg(M5PM1_REG_IRQ_STATUS1, new_val)) return M5PM1_ERR_I2C_COMM;
     } else if (cleanType == M5PM1_CLEAN_ALL) {
-        // 清除所有位
-        // Clear all bits
-        if (!_writeReg(M5PM1_REG_IRQ_STATUS1, 0x1F)) return M5PM1_ERR_I2C_COMM;
+        // 清除所有位（采用"写0清除"机制：写入0x00）
+        // Clear all bits (using "write-0-to-clear" mechanism: write 0x00)
+        if (!_writeReg(M5PM1_REG_IRQ_STATUS1, 0x00)) return M5PM1_ERR_I2C_COMM;
     }
     return M5PM1_OK;
 }
@@ -2809,10 +2968,18 @@ m5pm1_err_t M5PM1::irqClearGpio(uint8_t mask) {
         M5PM1_LOG_E(TAG, "Not initialized");
         return M5PM1_ERR_NOT_INIT;
     }
-    bool ok = _writeReg(M5PM1_REG_IRQ_STATUS1, mask);
-    if (!ok) {
+
+    // PM1芯片采用"写0清除"机制：读取当前值，清除mask中为1的位，写回
+    // PM1 chip uses "write-0-to-clear" mechanism: read, clear bits in mask, write back
+    uint8_t irq_status;
+    if (!_readReg(M5PM1_REG_IRQ_STATUS1, &irq_status)) {
         return M5PM1_ERR_I2C_COMM;
     }
+    uint8_t new_val = irq_status & ~mask;
+    if (!_writeReg(M5PM1_REG_IRQ_STATUS1, new_val)) {
+        return M5PM1_ERR_I2C_COMM;
+    }
+
     _autoSnapshotUpdate(M5PM1_SNAPSHOT_DOMAIN_IRQ_STATUS);
     return M5PM1_OK;
 }
@@ -2829,13 +2996,14 @@ m5pm1_err_t M5PM1::irqGetSysStatus(uint8_t* status, m5pm1_clean_type_t cleanType
     if (!_readReg(M5PM1_REG_IRQ_STATUS2, status)) return M5PM1_ERR_I2C_COMM;
 
     if (cleanType == M5PM1_CLEAN_TRIGGERED && *status != 0) {
-        // 清除已触发的位
-        // Clear triggered bits
-        if (!_writeReg(M5PM1_REG_IRQ_STATUS2, *status)) return M5PM1_ERR_I2C_COMM;
+        // 清除已触发的位（采用"写0清除"机制）
+        // Clear triggered bits (using "write-0-to-clear" mechanism)
+        uint8_t new_val = ~(*status);  // 反转位：触发位变为0，未触发位变为1
+        if (!_writeReg(M5PM1_REG_IRQ_STATUS2, new_val)) return M5PM1_ERR_I2C_COMM;
     } else if (cleanType == M5PM1_CLEAN_ALL) {
-        // 清除所有位
-        // Clear all bits
-        if (!_writeReg(M5PM1_REG_IRQ_STATUS2, 0x3F)) return M5PM1_ERR_I2C_COMM;
+        // 清除所有位（采用"写0清除"机制：写入0x00）
+        // Clear all bits (using "write-0-to-clear" mechanism: write 0x00)
+        if (!_writeReg(M5PM1_REG_IRQ_STATUS2, 0x00)) return M5PM1_ERR_I2C_COMM;
     }
     return M5PM1_OK;
 }
@@ -2845,10 +3013,18 @@ m5pm1_err_t M5PM1::irqClearSys(uint8_t mask) {
         M5PM1_LOG_E(TAG, "Not initialized");
         return M5PM1_ERR_NOT_INIT;
     }
-    bool ok = _writeReg(M5PM1_REG_IRQ_STATUS2, mask);
-    if (!ok) {
+
+    // PM1芯片采用"写0清除"机制：读取当前值，清除mask中为1的位，写回
+    // PM1 chip uses "write-0-to-clear" mechanism: read, clear bits in mask, write back
+    uint8_t irq_status;
+    if (!_readReg(M5PM1_REG_IRQ_STATUS2, &irq_status)) {
         return M5PM1_ERR_I2C_COMM;
     }
+    uint8_t new_val = irq_status & ~mask;
+    if (!_writeReg(M5PM1_REG_IRQ_STATUS2, new_val)) {
+        return M5PM1_ERR_I2C_COMM;
+    }
+
     _autoSnapshotUpdate(M5PM1_SNAPSHOT_DOMAIN_IRQ_STATUS);
     return M5PM1_OK;
 }
@@ -2865,13 +3041,14 @@ m5pm1_err_t M5PM1::irqGetBtnStatus(uint8_t* status, m5pm1_clean_type_t cleanType
     if (!_readReg(M5PM1_REG_IRQ_STATUS3, status)) return M5PM1_ERR_I2C_COMM;
 
     if (cleanType == M5PM1_CLEAN_TRIGGERED && *status != 0) {
-        // 清除已触发的位
-        // Clear triggered bits
-        if (!_writeReg(M5PM1_REG_IRQ_STATUS3, *status)) return M5PM1_ERR_I2C_COMM;
+        // 清除已触发的位（采用"写0清除"机制）
+        // Clear triggered bits (using "write-0-to-clear" mechanism)
+        uint8_t new_val = ~(*status);  // 反转位：触发位变为0，未触发位变为1
+        if (!_writeReg(M5PM1_REG_IRQ_STATUS3, new_val)) return M5PM1_ERR_I2C_COMM;
     } else if (cleanType == M5PM1_CLEAN_ALL) {
-        // 清除所有位
-        // Clear all bits
-        if (!_writeReg(M5PM1_REG_IRQ_STATUS3, 0x07)) return M5PM1_ERR_I2C_COMM;
+        // 清除所有位（采用"写0清除"机制：写入0x00）
+        // Clear all bits (using "write-0-to-clear" mechanism: write 0x00)
+        if (!_writeReg(M5PM1_REG_IRQ_STATUS3, 0x00)) return M5PM1_ERR_I2C_COMM;
     }
     return M5PM1_OK;
 }
@@ -2881,10 +3058,18 @@ m5pm1_err_t M5PM1::irqClearBtn(uint8_t mask) {
         M5PM1_LOG_E(TAG, "Not initialized");
         return M5PM1_ERR_NOT_INIT;
     }
-    bool ok = _writeReg(M5PM1_REG_IRQ_STATUS3, mask);
-    if (!ok) {
+
+    // PM1芯片采用"写0清除"机制：读取当前值，清除mask中为1的位，写回
+    // PM1 chip uses "write-0-to-clear" mechanism: read, clear bits in mask, write back
+    uint8_t irq_status;
+    if (!_readReg(M5PM1_REG_IRQ_STATUS3, &irq_status)) {
         return M5PM1_ERR_I2C_COMM;
     }
+    uint8_t new_val = irq_status & ~mask;
+    if (!_writeReg(M5PM1_REG_IRQ_STATUS3, new_val)) {
+        return M5PM1_ERR_I2C_COMM;
+    }
+
     _autoSnapshotUpdate(M5PM1_SNAPSHOT_DOMAIN_IRQ_STATUS);
     return M5PM1_OK;
 }

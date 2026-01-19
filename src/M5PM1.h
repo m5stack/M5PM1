@@ -62,6 +62,8 @@ typedef enum {
                                    // Device not initialized
     M5PM1_ERR_INTERNAL = -9,       // 内部错误
                                    // Internal error
+    M5PM1_ERR_VERIFY_FAILED = -10, // 配置校验失败（读回值与缓存不匹配）
+                                   // Configuration verification failed
 } m5pm1_err_t;
 
 // ============================
@@ -1085,6 +1087,17 @@ public:
     m5pm1_err_t dumpPinStatus();
 
     /**
+     * @brief Read back and verify GPIO configuration / 读回并校验GPIO配置
+     * @param enableLog Enable warning logs for mismatches / 启用不匹配的警告日志
+     * @return M5PM1_OK if successful, error code otherwise
+     * @note This function reads all GPIO registers and compares with cached values.
+     *       If mismatches are found and enableLog is true, warnings will be logged.
+     *       此函数读取所有GPIO寄存器并与缓存值比对。
+     *       如果发现不匹配且enableLog为true，将记录警告日志。
+     */
+    m5pm1_err_t verifyPinConfig(bool enableLog = true);
+
+    /**
      * @brief Get cached pin status / 获取缓存的引脚状态
      * @param pin GPIO pin number (0-4) / GPIO 引脚号
      * @param status Output: cached pin status / 输出: 缓存的引脚状态
@@ -1224,7 +1237,7 @@ public:
     // 定时器功能
     // Timer Functions
     // ========================
-    m5pm1_err_t timerSet(uint32_t seconds, m5pm1_tim_action_t action, bool autoRearm = false);
+    m5pm1_err_t timerSet(uint32_t seconds, m5pm1_tim_action_t action);
     m5pm1_err_t timerClear();
 
     // ========================
