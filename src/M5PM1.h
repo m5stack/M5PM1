@@ -110,8 +110,8 @@ typedef enum {
                                             //       5VINOUT（双向端口）
                                             //       2: BAT (battery)
                                             //       电池
-#define M5PM1_REG_WAKE_SRC          0x05    // R/W   [6:0] Wake source flags (write 1 to clear)
-                                            //       唤醒源标志（写1清除）
+#define M5PM1_REG_WAKE_SRC          0x05    // R/W   [6:0] Wake source flags (write 0 to clear)
+                                            //       唤醒源标志（写0清除）
                                             //       [6] 5VINOUT插入唤醒
                                             //       5VINOUT insertion wake
                                             //       [5] 外部GPIO唤醒
@@ -272,8 +272,8 @@ typedef enum {
 
 // ---- IRQ Registers ----
 // ---- 中断寄存器 ----
-// 注意：状态寄存器写1清除对应位
-// Note: Write 1 to clear status bits
+// 注意：状态寄存器写0清除对应位
+// Note: Write 0 to clear status bits
 #define M5PM1_REG_IRQ_STATUS1       0x40    // R/W   [4:0] GPIO interrupt status / GPIO中断状态
                                             //       触发条件：GPIO配置为IRQ功能时的边沿触发
                                             //       Trigger: Edge trigger when GPIO configured as IRQ
@@ -315,8 +315,8 @@ typedef enum {
                                             //       [0] BTN_STATE - 当前按钮状态: 0=释放 1=按下
 #define M5PM1_REG_BTN_CFG_1           0x49    // R/W   Button configuration / 按钮配置
                                             //       [7] DL_LOCK - 下载模式锁定: 0=正常 1=锁定（禁止进入下载模式）
-                                            //       [6:5] LONG_DLY - 长按延时: 00=125ms 01=250ms 10=500ms 11=1s
-                                            //       [4:3] DBL_DLY - 双击间隔: 00=125ms 01=250ms 10=500ms 11=1s
+                                            //       [6:5] DBL_DLY - 双击间隔: 00=125ms 01=250ms 10=500ms 11=1s
+                                            //       [4:3] LONG_DLY - 长按延时: 00=1s 01=2s 10=3s 11=4s
                                             //       [2:1] CLK_DLY - 单击延时: 00=125ms 01=250ms 10=500ms 11=1s
                                             //       [0] SINGLE_RST_DIS - 单击复位禁用: 0=使能 1=禁用
 #define M5PM1_REG_BTN_CFG_2         0x4A    // R/W   Button configuration 2 / 按钮配置2
@@ -329,7 +329,8 @@ typedef enum {
                                             //       [7-6] Reserved 保留
                                             //       [5] REFRESH - 写1刷新LED
                                             //       Write 1 to refresh LEDs
-                                            //       [4:0] LED_CNT - LED数量 (0-32)
+                                            //       [4:0] LED_CNT - LED数量 (1-31，5位寄存器限制)
+                                            //       LED count (1-31, 5-bit register limit)
 #define M5PM1_REG_AW8737A_PULSE     0x53    // R/W   AW8737A pulse control / AW8737A脉冲控制
                                             //       用于控制AW8737A音频放大器增益
                                             //       For controlling AW8737A audio amplifier gain
@@ -594,18 +595,18 @@ typedef enum {
 
 /**
  * @brief Button IRQ interrupt type / 按钮中断类型
- * @note 用于 IRQ_STATUS3 寄存器的位定义 / For IRQ_STATUS3 register bit definitions
+ * @note 用于 IRQ_STATUS3 寄存器的位掩码 / For IRQ_STATUS3 register bitmask
  */
 typedef enum {
-    M5PM1_BTN_IRQ_CLICK = 0x00,     // 单击中断
-                                    // Single click interrupt
-    M5PM1_BTN_IRQ_WAKEUP = 0x01,    // 唤醒中断
-                                    // Wakeup interrupt
-    M5PM1_BTN_IRQ_DOUBLE = 0x02,    // 双击中断
-                                    // Double click interrupt
+    M5PM1_BTN_IRQ_CLICK = 0x01,     // 单击中断 (bit 0)
+                                    // Single click interrupt (bit 0)
+    M5PM1_BTN_IRQ_WAKEUP = 0x02,    // 唤醒中断 (bit 1)
+                                    // Wakeup interrupt (bit 1)
+    M5PM1_BTN_IRQ_DOUBLE = 0x04,    // 双击中断 (bit 2)
+                                    // Double click interrupt (bit 2)
     M5PM1_BTN_IRQ_ALL = 0x07,       // 所有按钮中断
                                     // All button interrupts
-    M5PM1_BTN_IRQ_NONE = 0xFF       // 无中断
+    M5PM1_BTN_IRQ_NONE = 0x00       // 无中断
                                     // No interrupt
 } m5pm1_btn_irq_t;
 
@@ -959,7 +960,15 @@ typedef struct {
 // ============================
 class M5PM1 {
 public:
+    /**
+     * @brief 构造 M5PM1 对象
+     *        Construct M5PM1 object
+     */
     M5PM1();
+    /**
+     * @brief 析构 M5PM1 对象
+     *        Destroy M5PM1 object
+     */
     ~M5PM1();
 
     // ========================
@@ -1325,11 +1334,74 @@ public:
     // 电源保持功能
     // Power Hold Functions
     // ========================
+    /**
+     * @brief 设置 GPIO 电源保持功能
+     *        Set GPIO power hold function
+     * @param pin GPIO 引脚号 (0-4)
+     *            GPIO pin number (0-4)
+     * @param enable true=启用电源保持，false=禁用电源保持
+     *               true=enable power hold, false=disable power hold
+     * @return 成功返回 M5PM1_OK，否则返回错误码
+     *         Return M5PM1_OK on success, error code otherwise
+     * @note 启用后，即使按下关机按钮，该 GPIO 也会保持供电
+     *       When enabled, the GPIO will remain powered even if power-off button is pressed
+     */
     m5pm1_err_t gpioSetPowerHold(m5pm1_gpio_num_t pin, bool enable);
+
+    /**
+     * @brief 获取 GPIO 电源保持功能状态
+     *        Get GPIO power hold function state
+     * @param pin GPIO 引脚号 (0-4)
+     *            GPIO pin number (0-4)
+     * @param enable 输出参数，true=已启用，false=已禁用
+     *               Output parameter, true=enabled, false=disabled
+     * @return 成功返回 M5PM1_OK，否则返回错误码
+     *         Return M5PM1_OK on success, error code otherwise
+     */
     m5pm1_err_t gpioGetPowerHold(m5pm1_gpio_num_t pin, bool* enable);
+
+    /**
+     * @brief 设置 LDO 3.3V 电源保持功能
+     *        Set LDO 3.3V power hold function
+     * @param enable true=启用电源保持，false=禁用电源保持
+     *               true=enable power hold, false=disable power hold
+     * @return 成功返回 M5PM1_OK，否则返回错误码
+     *         Return M5PM1_OK on success, error code otherwise
+     * @note 启用后，即使按下关机按钮，LDO 3.3V 也会保持输出
+     *       When enabled, LDO 3.3V will remain powered even if power-off button is pressed
+     */
     m5pm1_err_t ldoSetPowerHold(bool enable);
+
+    /**
+     * @brief 获取 LDO 3.3V 电源保持功能状态
+     *        Get LDO 3.3V power hold function state
+     * @param enable 输出参数，true=已启用，false=已禁用
+     *               Output parameter, true=enabled, false=disabled
+     * @return 成功返回 M5PM1_OK，否则返回错误码
+     *         Return M5PM1_OK on success, error code otherwise
+     */
     m5pm1_err_t ldoGetPowerHold(bool* enable);
+
+    /**
+     * @brief 设置 DCDC 5V 电源保持功能
+     *        Set DCDC 5V power hold function
+     * @param enable true=启用电源保持，false=禁用电源保持
+     *               true=enable power hold, false=disable power hold
+     * @return 成功返回 M5PM1_OK，否则返回错误码
+     *         Return M5PM1_OK on success, error code otherwise
+     * @note 启用后，即使按下关机按钮，DCDC 5V 也会保持输出
+     *       When enabled, DCDC 5V will remain powered even if power-off button is pressed
+     */
     m5pm1_err_t dcdcSetPowerHold(bool enable);
+
+    /**
+     * @brief 获取 DCDC 5V 电源保持功能状态
+     *        Get DCDC 5V power hold function state
+     * @param enable 输出参数，true=已启用，false=已禁用
+     *               Output parameter, true=enabled, false=disabled
+     * @return 成功返回 M5PM1_OK，否则返回错误码
+     *         Return M5PM1_OK on success, error code otherwise
+     */
     m5pm1_err_t dcdcGetPowerHold(bool* enable);
 
     // ========================
@@ -1413,12 +1485,12 @@ public:
     m5pm1_err_t getPwmFrequency(uint16_t* frequency);
 
     /**
-     * @brief 设置 PWM 占空比（8位精度）
-     *        Set PWM duty cycle (8-bit precision)
+     * @brief 设置 PWM 占空比（百分比 0-100）
+     *        Set PWM duty cycle (percentage 0-100)
      * @param channel PWM 通道：M5PM1_PWM_CH_0 (GPIO3) / M5PM1_PWM_CH_1 (GPIO4)
      *                PWM channel: M5PM1_PWM_CH_0 (GPIO3) / M5PM1_PWM_CH_1 (GPIO4)
-     * @param duty 占空比 (0-255)，0=0%, 255=100%
-     *             Duty cycle (0-255), 0=0%, 255=100%
+     * @param duty 占空比百分比 (0-100)，0=0%, 100=100%
+     *             Duty cycle percentage (0-100), 0=0%, 100=100%
      * @param polarity 极性，false=正常，true=反相（默认 false）
      *                 Polarity, false=normal, true=inverted (default false)
      * @param enable 输出使能，true=启用，false=禁用（默认 true）
@@ -1432,12 +1504,12 @@ public:
                            bool polarity = false, bool enable = true);
 
     /**
-     * @brief 获取 PWM 占空比（8位精度）
-     *        Get PWM duty cycle (8-bit precision)
+     * @brief 获取 PWM 占空比（百分比 0-100）
+     *        Get PWM duty cycle (percentage 0-100)
      * @param channel PWM 通道：M5PM1_PWM_CH_0 (GPIO3) / M5PM1_PWM_CH_1 (GPIO4)
      *                PWM channel: M5PM1_PWM_CH_0 (GPIO3) / M5PM1_PWM_CH_1 (GPIO4)
-     * @param duty 输出参数，存储占空比 (0-255)
-     *             Output parameter, stores duty cycle (0-255)
+     * @param duty 输出参数，存储占空比百分比 (0-100)
+     *             Output parameter, stores duty cycle percentage (0-100)
      * @param polarity 输出参数，存储极性（false=正常，true=反相）
      *                 Output parameter, stores polarity (false=normal, true=inverted)
      * @param enable 输出参数，存储使能状态（true=启用，false=禁用）
@@ -1496,6 +1568,8 @@ public:
      *                  PWM 频率（0-65535，全通道共享）
      * @param duty12 12-bit duty (0-4095)
      *               12 位占空比（0-4095）
+     * @return 成功返回 M5PM1_OK，否则返回错误码
+     *         Return M5PM1_OK on success, error code otherwise
      * @note This API warns on conflicts but still applies settings
      *       此 API 对冲突仅告警，仍会继续配置
      * @note Changing frequency affects all channels
@@ -1585,8 +1659,8 @@ public:
     /**
      * @brief 获取当前电源来源
      *        Get current power source
-     * @param src 输出参数，存储电源来源：M5PM1_PWR_SRC_BATTERY / M5PM1_PWR_SRC_VIN / M5PM1_PWR_SRC_5V
-     *            Output parameter, stores power source: M5PM1_PWR_SRC_BATTERY / M5PM1_PWR_SRC_VIN / M5PM1_PWR_SRC_5V
+     * @param src 输出参数，存储电源来源：M5PM1_PWR_SRC_5VIN / M5PM1_PWR_SRC_5VINOUT / M5PM1_PWR_SRC_BAT / M5PM1_PWR_SRC_UNKNOWN
+     *            Output parameter, stores power source: M5PM1_PWR_SRC_5VIN / M5PM1_PWR_SRC_5VINOUT / M5PM1_PWR_SRC_BAT / M5PM1_PWR_SRC_UNKNOWN
      * @return 成功返回 M5PM1_OK，否则返回错误码
      *         Return M5PM1_OK on success, error code otherwise
      */
@@ -1719,15 +1793,65 @@ public:
     // 看门狗功能
     // Watchdog Functions
     // ========================
+    /**
+     * @brief 设置看门狗超时时间
+     *        Set watchdog timeout
+     * @param timeout_sec 超时时间（秒），0=禁用看门狗
+     *                    Timeout in seconds, 0=disable watchdog
+     * @return 成功返回 M5PM1_OK，否则返回错误码
+     *         Return M5PM1_OK on success, error code otherwise
+     * @note 超时后系统会自动复位，需要定期调用 wdtFeed() 喂狗
+     *       System will auto-reboot after timeout, need to call wdtFeed() periodically
+     */
     m5pm1_err_t wdtSet(uint8_t timeout_sec);
+
+    /**
+     * @brief 喂狗（重置看门狗计数器）
+     *        Feed watchdog (reset watchdog counter)
+     * @return 成功返回 M5PM1_OK，否则返回错误码
+     *         Return M5PM1_OK on success, error code otherwise
+     * @note 需要在超时前定期调用此函数，防止系统复位
+     *       Must call this function periodically before timeout to prevent system reboot
+     */
     m5pm1_err_t wdtFeed();
+
+    /**
+     * @brief 获取看门狗计数值
+     *        Get watchdog counter value
+     * @param count 输出参数，存储当前计数值（秒）
+     *              Output parameter, stores current counter value (seconds)
+     * @return 成功返回 M5PM1_OK，否则返回错误码
+     *         Return M5PM1_OK on success, error code otherwise
+     */
     m5pm1_err_t wdtGetCount(uint8_t* count);
 
     // ========================
     // 定时器功能
     // Timer Functions
     // ========================
+    /**
+     * @brief 设置定时器
+     *        Set timer
+     * @param seconds 定时时间（秒）
+     *                Timer duration in seconds
+     * @param action 定时器到期后的动作：
+     *               Action after timer expires:
+     *               - M5PM1_TIM_ACTION_STOP: 停止，无动作 / Stop, no action
+     *               - M5PM1_TIM_ACTION_FLAG: 仅设置标志 / Set flag only
+     *               - M5PM1_TIM_ACTION_REBOOT: 系统复位 / System reboot
+     *               - M5PM1_TIM_ACTION_POWERON: 开机 / Power on
+     *               - M5PM1_TIM_ACTION_POWEROFF: 关机 / Power off
+     * @return 成功返回 M5PM1_OK，否则返回错误码
+     *         Return M5PM1_OK on success, error code otherwise
+     */
     m5pm1_err_t timerSet(uint32_t seconds, m5pm1_tim_action_t action);
+
+    /**
+     * @brief 清除定时器
+     *        Clear timer
+     * @return 成功返回 M5PM1_OK，否则返回错误码
+     *         Return M5PM1_OK on success, error code otherwise
+     */
     m5pm1_err_t timerClear();
 
     // ========================
@@ -1741,6 +1865,8 @@ public:
      *             Button event type: M5PM1_BTN_TYPE_CLICK (single click) / M5PM1_BTN_TYPE_DOUBLE (double click) / M5PM1_BTN_TYPE_LONG (long press)
      * @param delay 延时配置：M5PM1_BTN_DELAY_125MS / 250MS / 500MS / 1000MS
      *              Delay configuration: M5PM1_BTN_DELAY_125MS / 250MS / 500MS / 1000MS
+     *              注意：长按类型的实际延时为 1s/2s/3s/4s（对应枚举值 0/1/2/3）
+     *              Note: For long press type, actual delays are 1s/2s/3s/4s (corresponding to enum values 0/1/2/3)
      * @return 成功返回 M5PM1_OK，否则返回错误码
      *         Return M5PM1_OK on success, error code otherwise
      */
@@ -1835,6 +1961,15 @@ public:
      *         Return M5PM1_OK on success, error code otherwise
      */
     m5pm1_err_t irqGetGpioStatus(uint8_t* status, m5pm1_clean_type_t cleanType = M5PM1_CLEAN_NONE);
+
+    /**
+     * @brief 清除 GPIO 中断状态
+     *        Clear GPIO interrupt status
+     * @param mask 要清除的中断位掩码
+     *             Interrupt bitmask to clear
+     * @return 成功返回 M5PM1_OK，否则返回错误码
+     *         Return M5PM1_OK on success, error code otherwise
+     */
     m5pm1_err_t irqClearGpio(uint8_t mask);
 
     /**
@@ -1854,6 +1989,15 @@ public:
      *         Return M5PM1_OK on success, error code otherwise
      */
     m5pm1_err_t irqGetSysStatus(uint8_t* status, m5pm1_clean_type_t cleanType = M5PM1_CLEAN_NONE);
+
+    /**
+     * @brief 清除系统中断状态
+     *        Clear system interrupt status
+     * @param mask 要清除的中断位掩码
+     *             Interrupt bitmask to clear
+     * @return 成功返回 M5PM1_OK，否则返回错误码
+     *         Return M5PM1_OK on success, error code otherwise
+     */
     m5pm1_err_t irqClearSys(uint8_t mask);
 
     /**
@@ -1873,6 +2017,15 @@ public:
      *         Return M5PM1_OK on success, error code otherwise
      */
     m5pm1_err_t irqGetBtnStatus(uint8_t* status, m5pm1_clean_type_t cleanType = M5PM1_CLEAN_NONE);
+
+    /**
+     * @brief 清除按钮中断状态
+     *        Clear button interrupt status
+     * @param mask 要清除的中断位掩码
+     *             Interrupt bitmask to clear
+     * @return 成功返回 M5PM1_OK，否则返回错误码
+     *         Return M5PM1_OK on success, error code otherwise
+     */
     m5pm1_err_t irqClearBtn(uint8_t mask);
 
     // ========================
@@ -1964,6 +2117,17 @@ public:
      *         Return M5PM1_OK on success, error code otherwise
      */
     m5pm1_err_t irqSetGpioMask(m5pm1_gpio_num_t pin, m5pm1_irq_mask_ctrl_t mask);
+
+    /**
+     * @brief 获取单个 GPIO 引脚中断屏蔽状态
+     *        Get single GPIO pin interrupt mask state
+     * @param pin GPIO 引脚号 (0-4)
+     *            GPIO pin number (0-4)
+     * @param mask 输出参数，存储屏蔽状态：M5PM1_IRQ_MASK_DISABLE (未屏蔽) / M5PM1_IRQ_MASK_ENABLE (已屏蔽)
+     *             Output parameter, stores mask state: M5PM1_IRQ_MASK_DISABLE (unmasked) / M5PM1_IRQ_MASK_ENABLE (masked)
+     * @return 成功返回 M5PM1_OK，否则返回错误码
+     *         Return M5PM1_OK on success, error code otherwise
+     */
     m5pm1_err_t irqGetGpioMask(m5pm1_gpio_num_t pin, m5pm1_irq_mask_ctrl_t* mask);
 
     /**
@@ -1973,6 +2137,15 @@ public:
      *         Return M5PM1_OK on success, error code otherwise
      */
     m5pm1_err_t irqSetGpioMaskAll(uint8_t mask);
+
+    /**
+     * @brief 获取所有 GPIO 中断屏蔽状态
+     *        Get all GPIO interrupt mask state
+     * @param mask 输出参数，存储所有 GPIO 引脚的屏蔽位掩码
+     *             Output parameter, stores bitmask for all GPIO pins
+     * @return 成功返回 M5PM1_OK，否则返回错误码
+     *         Return M5PM1_OK on success, error code otherwise
+     */
     m5pm1_err_t irqGetGpioMaskAll(uint8_t* mask);
 
     /**
@@ -1984,6 +2157,17 @@ public:
      *         Return M5PM1_OK on success, error code otherwise
      */
     m5pm1_err_t irqSetSysMask(uint8_t event, m5pm1_irq_mask_ctrl_t mask);
+
+    /**
+     * @brief 获取单个系统事件中断屏蔽状态
+     *        Get single system event interrupt mask state
+     * @param event 事件位 (0-5): 0=5VIN_IN, 1=5VIN_OUT, 2=5VINOUT_IN, 3=5VINOUT_OUT, 4=BAT_IN, 5=BAT_OUT
+     *              Event bit (0-5): 0=5VIN_IN, 1=5VIN_OUT, 2=5VINOUT_IN, 3=5VINOUT_OUT, 4=BAT_IN, 5=BAT_OUT
+     * @param mask 输出参数，存储屏蔽状态：M5PM1_IRQ_MASK_DISABLE (未屏蔽) / M5PM1_IRQ_MASK_ENABLE (已屏蔽)
+     *             Output parameter, stores mask state: M5PM1_IRQ_MASK_DISABLE (unmasked) / M5PM1_IRQ_MASK_ENABLE (masked)
+     * @return 成功返回 M5PM1_OK，否则返回错误码
+     *         Return M5PM1_OK on success, error code otherwise
+     */
     m5pm1_err_t irqGetSysMask(uint8_t event, m5pm1_irq_mask_ctrl_t* mask);
 
     /**
@@ -1993,6 +2177,15 @@ public:
      *         Return M5PM1_OK on success, error code otherwise
      */
     m5pm1_err_t irqSetSysMaskAll(uint8_t mask);
+
+    /**
+     * @brief 获取所有系统中断屏蔽状态
+     *        Get all system interrupt mask state
+     * @param mask 输出参数，存储所有系统事件的屏蔽位掩码
+     *             Output parameter, stores bitmask for all system events
+     * @return 成功返回 M5PM1_OK，否则返回错误码
+     *         Return M5PM1_OK on success, error code otherwise
+     */
     m5pm1_err_t irqGetSysMaskAll(uint8_t* mask);
 
     /**
@@ -2004,6 +2197,17 @@ public:
      *         Return M5PM1_OK on success, error code otherwise
      */
     m5pm1_err_t irqSetBtnMask(m5pm1_btn_irq_t type, m5pm1_irq_mask_ctrl_t mask);
+
+    /**
+     * @brief 获取单个按钮事件中断屏蔽状态
+     *        Get single button event interrupt mask state
+     * @param type 按钮事件类型：M5PM1_BTN_IRQ_CLICK / WAKEUP / DOUBLE
+     *             Button event type: M5PM1_BTN_IRQ_CLICK / WAKEUP / DOUBLE
+     * @param mask 输出参数，存储屏蔽状态：M5PM1_IRQ_MASK_DISABLE (未屏蔽) / M5PM1_IRQ_MASK_ENABLE (已屏蔽)
+     *             Output parameter, stores mask state: M5PM1_IRQ_MASK_DISABLE (unmasked) / M5PM1_IRQ_MASK_ENABLE (masked)
+     * @return 成功返回 M5PM1_OK，否则返回错误码
+     *         Return M5PM1_OK on success, error code otherwise
+     */
     m5pm1_err_t irqGetBtnMask(m5pm1_btn_irq_t type, m5pm1_irq_mask_ctrl_t* mask);
 
     /**
@@ -2013,15 +2217,49 @@ public:
      *         Return M5PM1_OK on success, error code otherwise
      */
     m5pm1_err_t irqSetBtnMaskAll(uint8_t mask);
+    /**
+     * @brief 获取所有按钮中断屏蔽状态
+     *        Get all button interrupt mask state
+     * @param mask 输出参数，存储所有按钮事件的屏蔽位掩码
+     *             Output parameter, stores bitmask for all button events
+     * @return 成功返回 M5PM1_OK，否则返回错误码
+     *         Return M5PM1_OK on success, error code otherwise
+     */
     m5pm1_err_t irqGetBtnMaskAll(uint8_t* mask);
 
     // ========================
     // 系统命令
     // System Commands
     // ========================
+    /**
+     * @brief 发送系统命令
+     *        Send system command
+     * @param cmd 系统命令类型
+     *            System command type
+     * @return 成功返回 M5PM1_OK，否则返回错误码
+     *         Return M5PM1_OK on success, error code otherwise
+     */
     m5pm1_err_t sysCmd(m5pm1_sys_cmd_t cmd);
+    /**
+     * @brief 请求关机
+     *        Request shutdown
+     * @return 成功返回 M5PM1_OK，否则返回错误码
+     *         Return M5PM1_OK on success, error code otherwise
+     */
     m5pm1_err_t shutdown();
+    /**
+     * @brief 请求重启
+     *        Request reboot
+     * @return 成功返回 M5PM1_OK，否则返回错误码
+     *         Return M5PM1_OK on success, error code otherwise
+     */
     m5pm1_err_t reboot();
+    /**
+     * @brief 进入下载模式
+     *        Enter download mode
+     * @return 成功返回 M5PM1_OK，否则返回错误码
+     *         Return M5PM1_OK on success, error code otherwise
+     */
     m5pm1_err_t enterDownloadMode();
 
     /**
@@ -2033,25 +2271,99 @@ public:
      * @note This controls bit 7 (DL_LOCK) in BTN_CFG register
      */
     m5pm1_err_t setDownloadLock(bool lock);
+    /**
+     * @brief 获取下载模式锁状态
+     *        Get download mode lock state
+     * @param lock 输出参数，存储锁定状态
+     *             Output parameter, stores lock state
+     * @return 成功返回 M5PM1_OK，否则返回错误码
+     *         Return M5PM1_OK on success, error code otherwise
+     */
     m5pm1_err_t getDownloadLock(bool* lock);
 
     // ========================
     // NeoPixel 功能
     // NeoPixel Functions
     // ========================
-        /**
-     * @brief Configure NeoPixel in one call / 一键配置 NeoPixel
-     * @param count LED count (1-32) / LED 数量
-     * @param rgb565Data RGB565 format color data array / RGB565 格式颜色数据数组
-     * @param refresh Whether to refresh immediately / 是否立即刷新
-     * @return true if successful
+    /**
+     * @brief 一键配置 NeoPixel LED
+     *        Configure NeoPixel LEDs in one call
+     * @param colors RGB 颜色数组（m5pm1_rgb_t 格式）
+     *               RGB color array (m5pm1_rgb_t format)
+     * @param arraySize 颜色数组大小
+     *                  Size of color array
+     * @param count LED 数量 (1-32)
+     *              LED count (1-32)
+     * @param autoRefresh 是否立即刷新显示（默认 true）
+     *                    Whether to refresh immediately (default true)
+     * @return 成功返回 M5PM1_OK，否则返回错误码
+     *         Return M5PM1_OK on success, error code otherwise
      */
     m5pm1_err_t setLeds(const m5pm1_rgb_t* colors, uint8_t arraySize, uint8_t count,
                         bool autoRefresh = true);
+
+    /**
+     * @brief 设置 NeoPixel LED 数量
+     *        Set NeoPixel LED count
+     * @param count LED 数量 (1-31，受5位寄存器限制)
+     *              LED count (1-31, limited by 5-bit register)
+     * @return 成功返回 M5PM1_OK，否则返回错误码
+     *         Return M5PM1_OK on success, error code otherwise
+     * @note 寄存器为5位宽度，最大值为31。设置为32会溢出为0
+     *       Register is 5-bit wide, maximum value is 31. Setting to 32 will overflow to 0
+     */
     m5pm1_err_t setLedCount(uint8_t count);
+
+    /**
+     * @brief 设置单个 LED 颜色（RGB 分量）
+     *        Set single LED color (RGB components)
+     * @param index LED 索引 (0-31)
+     *              LED index (0-31)
+     * @param r 红色分量 (0-255)
+     *          Red component (0-255)
+     * @param g 绿色分量 (0-255)
+     *          Green component (0-255)
+     * @param b 蓝色分量 (0-255)
+     *          Blue component (0-255)
+     * @return 成功返回 M5PM1_OK，否则返回错误码
+     *         Return M5PM1_OK on success, error code otherwise
+     * @note 设置后需要调用 refreshLeds() 才会生效
+     *       Need to call refreshLeds() to apply changes
+     */
     m5pm1_err_t setLedColor(uint8_t index, uint8_t r, uint8_t g, uint8_t b);
+
+    /**
+     * @brief 设置单个 LED 颜色（RGB 结构体）
+     *        Set single LED color (RGB struct)
+     * @param index LED 索引 (0-31)
+     *              LED index (0-31)
+     * @param color RGB 颜色结构体
+     *              RGB color struct
+     * @return 成功返回 M5PM1_OK，否则返回错误码
+     *         Return M5PM1_OK on success, error code otherwise
+     * @note 设置后需要调用 refreshLeds() 才会生效
+     *       Need to call refreshLeds() to apply changes
+     */
     m5pm1_err_t setLedColor(uint8_t index, m5pm1_rgb_t color);
+
+    /**
+     * @brief 刷新 LED 显示
+     *        Refresh LED display
+     * @return 成功返回 M5PM1_OK，否则返回错误码
+     *         Return M5PM1_OK on success, error code otherwise
+     * @note 调用此函数后，之前设置的颜色才会显示到 LED 上
+     *       Call this function to apply previously set colors to LEDs
+     */
     m5pm1_err_t refreshLeds();
+
+    /**
+     * @brief 禁用 NeoPixel LED
+     *        Disable NeoPixel LEDs
+     * @return 成功返回 M5PM1_OK，否则返回错误码
+     *         Return M5PM1_OK on success, error code otherwise
+     * @note 禁用后 LED 会熄灭，可降低功耗
+     *       LEDs will turn off after disabling, reducing power consumption
+     */
     m5pm1_err_t disableLeds();
 
 
@@ -2060,26 +2372,123 @@ public:
     // AW8737A 脉冲功能
     // AW8737A Pulse Functions
     // ========================
+    /**
+     * @brief 设置 AW8737A 脉冲次数并可选刷新
+     *        Set AW8737A pulse count with optional refresh
+     * @param pin GPIO 引脚号
+     *            GPIO pin number
+     * @param num 脉冲次数
+     *            Pulse count
+     * @param refresh 刷新方式
+     *                Refresh control
+     * @return 成功返回 M5PM1_OK，否则返回错误码
+     *         Return M5PM1_OK on success, error code otherwise
+     */
     m5pm1_err_t setAw8737aPulse(m5pm1_gpio_num_t pin, m5pm1_aw8737a_pulse_t num,
                                m5pm1_aw8737a_refresh_t refresh = M5PM1_AW8737A_REFRESH_NOW);
+    /**
+     * @brief 刷新 AW8737A 脉冲配置
+     *        Refresh AW8737A pulse configuration
+     * @return 成功返回 M5PM1_OK，否则返回错误码
+     *         Return M5PM1_OK on success, error code otherwise
+     */
     m5pm1_err_t refreshAw8737aPulse();
 
     // ========================
     // RTC RAM 功能
     // RTC RAM Functions
     // ========================
+    /**
+     * @brief 写入 RTC RAM
+     *        Write to RTC RAM
+     * @param offset 偏移地址 (0-31)
+     *               Offset address (0-31)
+     * @param data 要写入的数据
+     *             Data to write
+     * @param len 数据长度（字节）
+     *            Data length (bytes)
+     * @return 成功返回 M5PM1_OK，否则返回错误码
+     *         Return M5PM1_OK on success, error code otherwise
+     * @note RTC RAM 总共 32 字节，掉电和睡眠时数据保持
+     *       RTC RAM has 32 bytes total, data persists during power-off and sleep
+     */
     m5pm1_err_t writeRtcRAM(uint8_t offset, const uint8_t* data, uint8_t len);
+
+    /**
+     * @brief 读取 RTC RAM
+     *        Read from RTC RAM
+     * @param offset 偏移地址 (0-31)
+     *               Offset address (0-31)
+     * @param data 存储读取数据的缓冲区
+     *             Buffer to store read data
+     * @param len 要读取的数据长度（字节）
+     *            Length of data to read (bytes)
+     * @return 成功返回 M5PM1_OK，否则返回错误码
+     *         Return M5PM1_OK on success, error code otherwise
+     * @note RTC RAM 总共 32 字节，掉电和睡眠时数据保持
+     *       RTC RAM has 32 bytes total, data persists during power-off and sleep
+     */
     m5pm1_err_t readRtcRAM(uint8_t offset, uint8_t* data, uint8_t len);
 
     // ========================
     // I2C 配置
     // I2C Configuration
     // ========================
+    /**
+     * @brief 配置 I2C 参数（睡眠时间和速度）
+     *        Configure I2C parameters (sleep time and speed)
+     * @param sleepTime I2C 睡眠时间（秒），超时后进入低功耗模式
+     *                  I2C sleep time (seconds), enter low power mode after timeout
+     * @param speed I2C 速度：M5PM1_I2C_SPEED_100K (标准模式) / M5PM1_I2C_SPEED_400K (快速模式)，默认 100KHz
+     *              I2C speed: M5PM1_I2C_SPEED_100K (standard mode) / M5PM1_I2C_SPEED_400K (fast mode), default 100KHz
+     * @return 成功返回 M5PM1_OK，否则返回错误码
+     *         Return M5PM1_OK on success, error code otherwise
+     * @note 切换到 400KHz 后需要重新初始化 I2C 总线
+     *       Need to re-initialize I2C bus after switching to 400KHz
+     */
     m5pm1_err_t setI2cConfig(uint8_t sleepTime,
                              m5pm1_i2c_speed_t speed = M5PM1_I2C_SPEED_100K);
+
+    /**
+     * @brief 切换 I2C 速度
+     *        Switch I2C speed
+     * @param speed I2C 速度：M5PM1_I2C_SPEED_100K (标准模式) / M5PM1_I2C_SPEED_400K (快速模式)
+     *              I2C speed: M5PM1_I2C_SPEED_100K (standard mode) / M5PM1_I2C_SPEED_400K (fast mode)
+     * @return 成功返回 M5PM1_OK，否则返回错误码
+     *         Return M5PM1_OK on success, error code otherwise
+     * @note 切换速度后需要重新初始化 I2C 总线
+     *       Need to re-initialize I2C bus after switching speed
+     */
     m5pm1_err_t switchI2cSpeed(m5pm1_i2c_speed_t speed);
+
+    /**
+     * @brief 获取当前 I2C 速度
+     *        Get current I2C speed
+     * @param speed 输出参数，存储当前 I2C 速度
+     *              Output parameter, stores current I2C speed
+     * @return 成功返回 M5PM1_OK，否则返回错误码
+     *         Return M5PM1_OK on success, error code otherwise
+     */
     m5pm1_err_t getI2cSpeed(m5pm1_i2c_speed_t* speed);
+
+    /**
+     * @brief 设置 I2C 睡眠时间
+     *        Set I2C sleep time
+     * @param seconds 睡眠时间（秒），超时后进入低功耗模式
+     *                Sleep time (seconds), enter low power mode after timeout
+     * @return 成功返回 M5PM1_OK，否则返回错误码
+     *         Return M5PM1_OK on success, error code otherwise
+     */
     m5pm1_err_t setI2cSleepTime(uint8_t seconds);
+
+    /**
+     * @brief 获取 I2C 睡眠时间
+     *        Get I2C sleep time
+     * @param seconds 输出参数，存储睡眠时间（秒）
+     *                Output parameter, stores sleep time (seconds)
+     * @return 成功返回 M5PM1_OK，否则返回错误码
+     *         Return M5PM1_OK on success, error code otherwise
+     */
     m5pm1_err_t getI2cSleepTime(uint8_t* seconds);
 
     // ========================
@@ -2119,32 +2528,146 @@ public:
     // 状态快照功能
     // State Snapshot Functions
     // ========================
+    /**
+     * @brief 设置自动快照功能
+     *        Enable or disable auto snapshot
+     * @param enable 是否启用
+     *               Enable or disable
+     */
     void setAutoSnapshot(bool enable);
+    /**
+     * @brief 获取自动快照是否启用
+     *        Check whether auto snapshot is enabled
+     * @return true 表示已启用，false 表示未启用
+     *         true if enabled, false otherwise
+     */
     bool isAutoSnapshotEnabled() const;
+    /**
+     * @brief 更新状态快照
+     *        Update state snapshot
+     * @return 成功返回 M5PM1_OK，否则返回错误码
+     *         Return M5PM1_OK on success, error code otherwise
+     */
     m5pm1_err_t updateSnapshot();
 
     // ========================
     // 快照验证
     // Snapshot Verification
     // ========================
+    /**
+     * @brief 验证当前快照一致性
+     *        Verify snapshot consistency
+     * @return 快照验证结果
+     *         Snapshot verification result
+     */
     m5pm1_snapshot_verify_t verifySnapshot();
 
     // ========================
     // 配置验证
     // Configuration Validation
     // ========================
+    /**
+     * @brief 校验配置项与当前状态
+     *        Validate configuration against current state
+     * @param pin GPIO 引脚号
+     *            GPIO pin number
+     * @param configType 配置类型
+     *                   Configuration type
+     * @param enable 是否启用校验（默认启用）
+     *               Enable validation (default true)
+     * @return 校验结果
+     *         Validation result
+     */
     m5pm1_validation_t validateConfig(uint8_t pin, m5pm1_config_type_t configType, bool enable = true);
 
     // ========================
     // 缓存状态查询函数
     // Cached State Query Functions
     // ========================
+    /**
+     * @brief 获取缓存的 PWM 频率
+     *        Get cached PWM frequency
+     * @param frequency 输出参数，存储缓存频率
+     *                  Output parameter, stores cached frequency
+     * @return 成功返回 M5PM1_OK，否则返回错误码
+     *         Return M5PM1_OK on success, error code otherwise
+     */
     m5pm1_err_t getCachedPwmFrequency(uint16_t* frequency);
+    /**
+     * @brief 获取缓存的 PWM 状态
+     *        Get cached PWM state
+     * @param channel PWM 通道
+     *                PWM channel
+     * @param duty12 输出参数，存储 12 位占空比
+     *               Output parameter, stores 12-bit duty
+     * @param enable 输出参数，存储使能状态
+     *               Output parameter, stores enable state
+     * @param polarity 输出参数，存储极性
+     *                 Output parameter, stores polarity
+     * @return 成功返回 M5PM1_OK，否则返回错误码
+     *         Return M5PM1_OK on success, error code otherwise
+     */
     m5pm1_err_t getCachedPwmState(m5pm1_pwm_channel_t channel, uint16_t* duty12, bool* enable, bool* polarity);
+    /**
+     * @brief 获取缓存的 ADC 状态
+     *        Get cached ADC state
+     * @param channel 输出参数，存储 ADC 通道
+     *                Output parameter, stores ADC channel
+     * @param busy 输出参数，存储忙状态
+     *             Output parameter, stores busy state
+     * @param lastValue 输出参数，存储最近一次采样值
+     *                  Output parameter, stores last sampled value
+     * @return 成功返回 M5PM1_OK，否则返回错误码
+     *         Return M5PM1_OK on success, error code otherwise
+     */
     m5pm1_err_t getCachedAdcState(m5pm1_adc_channel_t* channel, bool* busy, uint16_t* lastValue);
+    /**
+     * @brief 获取缓存的电源配置
+     *        Get cached power configuration
+     * @param pwrCfg 输出参数，存储 PWR_CFG 缓存值
+     *               Output parameter, stores PWR_CFG cached value
+     * @param holdCfg 输出参数，存储 HOLD_CFG 缓存值
+     *                Output parameter, stores HOLD_CFG cached value
+     * @return 成功返回 M5PM1_OK，否则返回错误码
+     *         Return M5PM1_OK on success, error code otherwise
+     */
     m5pm1_err_t getCachedPowerConfig(uint8_t* pwrCfg, uint8_t* holdCfg);
+    /**
+     * @brief 获取缓存的按钮配置
+     *        Get cached button configuration
+     * @param cfg1 输出参数，存储 BTN_CFG_1 缓存值
+     *             Output parameter, stores BTN_CFG_1 cached value
+     * @param cfg2 输出参数，存储 BTN_CFG_2 缓存值
+     *             Output parameter, stores BTN_CFG_2 cached value
+     * @return 成功返回 M5PM1_OK，否则返回错误码
+     *         Return M5PM1_OK on success, error code otherwise
+     */
     m5pm1_err_t getCachedButtonConfig(uint8_t* cfg1, uint8_t* cfg2);
+    /**
+     * @brief 获取缓存的中断屏蔽状态
+     *        Get cached interrupt mask state
+     * @param mask1 输出参数，存储 IRQ_MASK1 缓存值
+     *              Output parameter, stores IRQ_MASK1 cached value
+     * @param mask2 输出参数，存储 IRQ_MASK2 缓存值
+     *              Output parameter, stores IRQ_MASK2 cached value
+     * @param mask3 输出参数，存储 IRQ_MASK3 缓存值
+     *              Output parameter, stores IRQ_MASK3 cached value
+     * @return 成功返回 M5PM1_OK，否则返回错误码
+     *         Return M5PM1_OK on success, error code otherwise
+     */
     m5pm1_err_t getCachedIrqMasks(uint8_t* mask1, uint8_t* mask2, uint8_t* mask3);
+    /**
+     * @brief 获取缓存的中断状态
+     *        Get cached interrupt status
+     * @param status1 输出参数，存储 IRQ_STATUS1 缓存值
+     *                Output parameter, stores IRQ_STATUS1 cached value
+     * @param status2 输出参数，存储 IRQ_STATUS2 缓存值
+     *                Output parameter, stores IRQ_STATUS2 cached value
+     * @param status3 输出参数，存储 IRQ_STATUS3 缓存值
+     *                Output parameter, stores IRQ_STATUS3 cached value
+     * @return 成功返回 M5PM1_OK，否则返回错误码
+     *         Return M5PM1_OK on success, error code otherwise
+     */
     m5pm1_err_t getCachedIrqStatus(uint8_t* status1, uint8_t* status2, uint8_t* status3);
 
 private:

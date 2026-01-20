@@ -2834,9 +2834,9 @@ m5pm1_err_t M5PM1::btnGetState(bool* pressed) {
     // Use internal function to read register and maintain BTN_FLAG cache
     // 使用内部函数读取寄存器并维护 BTN_FLAG 缓存
     if (!_readBtnStatus(&val)) return M5PM1_ERR_I2C_COMM;
-    // bit0: 0=按下, 1=松开
-    // bit0: 0=pressed, 1=released
-    *pressed = (val & 0x01) == 0;
+    // bit0: 0=释放, 1=按下
+    // bit0: 0=released, 1=pressed
+    *pressed = (val & 0x01) != 0;
     return M5PM1_OK;
 }
 
@@ -3366,7 +3366,12 @@ m5pm1_err_t M5PM1::irqGetSysMaskAll(uint8_t* mask) {
 }
 
 m5pm1_err_t M5PM1::irqSetBtnMask(m5pm1_btn_irq_t type, m5pm1_irq_mask_ctrl_t mask) {
-    if (type > M5PM1_BTN_IRQ_DOUBLE) return M5PM1_ERR_INVALID_ARG;
+    // 验证参数：type 必须是有效的位掩码
+    // Validate parameter: type must be a valid bitmask
+    if (type != M5PM1_BTN_IRQ_CLICK && type != M5PM1_BTN_IRQ_WAKEUP &&
+        type != M5PM1_BTN_IRQ_DOUBLE) {
+        return M5PM1_ERR_INVALID_ARG;
+    }
     if (!_initialized) {
         M5PM1_LOG_E(TAG, "Not initialized");
         return M5PM1_ERR_NOT_INIT;
@@ -3375,10 +3380,12 @@ m5pm1_err_t M5PM1::irqSetBtnMask(m5pm1_btn_irq_t type, m5pm1_irq_mask_ctrl_t mas
     uint8_t regVal;
     if (!_readReg(M5PM1_REG_IRQ_MASK3, &regVal)) return M5PM1_ERR_I2C_COMM;
 
+    // 直接使用位掩码操作
+    // Use bitmask operation directly
     if (mask == M5PM1_IRQ_MASK_ENABLE) {
-        regVal |= (1 << (uint8_t)type);
+        regVal |= (uint8_t)type;
     } else {
-        regVal &= ~(1 << (uint8_t)type);
+        regVal &= ~(uint8_t)type;
     }
 
     bool ok = _writeReg(M5PM1_REG_IRQ_MASK3, regVal);
@@ -3391,7 +3398,12 @@ m5pm1_err_t M5PM1::irqSetBtnMask(m5pm1_btn_irq_t type, m5pm1_irq_mask_ctrl_t mas
 
 m5pm1_err_t M5PM1::irqGetBtnMask(m5pm1_btn_irq_t type, m5pm1_irq_mask_ctrl_t* mask) {
     if (mask == nullptr) return M5PM1_ERR_INVALID_ARG;
-    if (type > M5PM1_BTN_IRQ_DOUBLE) return M5PM1_ERR_INVALID_ARG;
+    // 验证参数：type 必须是有效的位掩码
+    // Validate parameter: type must be a valid bitmask
+    if (type != M5PM1_BTN_IRQ_CLICK && type != M5PM1_BTN_IRQ_WAKEUP &&
+        type != M5PM1_BTN_IRQ_DOUBLE) {
+        return M5PM1_ERR_INVALID_ARG;
+    }
     if (!_initialized) {
         M5PM1_LOG_E(TAG, "Not initialized");
         return M5PM1_ERR_NOT_INIT;
@@ -3400,7 +3412,9 @@ m5pm1_err_t M5PM1::irqGetBtnMask(m5pm1_btn_irq_t type, m5pm1_irq_mask_ctrl_t* ma
     uint8_t regVal;
     if (!_readReg(M5PM1_REG_IRQ_MASK3, &regVal)) return M5PM1_ERR_I2C_COMM;
 
-    *mask = (m5pm1_irq_mask_ctrl_t)((regVal >> (uint8_t)type) & 0x01);
+    // 直接使用位掩码检查
+    // Use bitmask check directly
+    *mask = (regVal & (uint8_t)type) ? M5PM1_IRQ_MASK_ENABLE : M5PM1_IRQ_MASK_DISABLE;
     return M5PM1_OK;
 }
 
@@ -3499,8 +3513,10 @@ m5pm1_err_t M5PM1::getDownloadLock(bool* lock) {
 // ============================
 
 m5pm1_err_t M5PM1::setLedCount(uint8_t count) {
-    if (count > M5PM1_MAX_LED_COUNT) {
-        M5PM1_LOG_E(TAG, "LED count %d exceeds maximum %d", count, M5PM1_MAX_LED_COUNT);
+    // 验证参数：count 必须在 1-31 范围内（5位寄存器限制）
+    // Validate parameter: count must be in range 1-31 (5-bit register limit)
+    if (count == 0 || count > 31) {
+        M5PM1_LOG_E(TAG, "LED count %d out of valid range (1-31)", count);
         return M5PM1_ERR_INVALID_ARG;
     }
     if (!_initialized) {
