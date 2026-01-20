@@ -610,6 +610,16 @@ typedef enum {
 } m5pm1_btn_irq_t;
 
 /**
+ * @brief IRQ Mask Control Types / 中断屏蔽控制类型
+ */
+typedef enum {
+    M5PM1_IRQ_MASK_DISABLE = 0x00, // 不屏蔽中断（允许中断）
+                                   // Don't mask (Enable interrupt)
+    M5PM1_IRQ_MASK_ENABLE = 0x01   // 屏蔽中断（禁止中断）
+                                   // Mask interrupt (Disable interrupt)
+} m5pm1_irq_mask_ctrl_t;
+
+/**
  * @brief I2C speed selection / I2C速度选择
  * @note PM1上电默认100KHz，切换400KHz需要先写入配置再重新初始化I2C
  *       PM1 defaults to 100KHz on power-up, switching to 400KHz requires
@@ -678,8 +688,8 @@ typedef enum {
 typedef enum {
     M5PM1_CLEAN_NONE = 0x00,        // 不清除
                                     // No clean
-    M5PM1_CLEAN_TRIGGERED = 0x01,   // 清除已触发的位
-                                    // Clean triggered bits only
+    M5PM1_CLEAN_ONCE = 0x01,        // 清除一位（从低位往高位逐个清除）
+                                    // Clean one bit (from low to high, one at a time)
     M5PM1_CLEAN_ALL = 0x02          // 清除所有位
                                     // Clean all bits
 } m5pm1_clean_type_t;
@@ -1193,12 +1203,20 @@ public:
     m5pm1_err_t getPowerSource(m5pm1_pwr_src_t* src);
 
     /**
-     * @brief Read wake source / 读取唤醒源
-     * @param src Output: wake source bitmask / 输出: 唤醒源位掩码
-     * @param cleanType Clean behavior after read / 读取后的清除行为
-     *                  M5PM1_CLEAN_NONE=不清除, M5PM1_CLEAN_TRIGGERED=清除触发位, M5PM1_CLEAN_ALL=清除全部
-     * @return M5PM1_OK if successful, error code otherwise
-     *         成功返回 M5PM1_OK，否则返回错误码
+     * @brief 读取唤醒源
+     *        Read wake source
+     * @param src 输出：唤醒源位掩码
+     *            Output: wake source bitmask
+     * @param cleanType 读取后的清除行为
+     *                  Clean behavior after read
+     *                  - M5PM1_CLEAN_NONE: 不清除
+     *                  - M5PM1_CLEAN_NONE: No clean
+     *                  - M5PM1_CLEAN_ONCE: 清除本次读到的唤醒源位
+     *                  - M5PM1_CLEAN_ONCE: Clear wake source bits read this time
+     *                  - M5PM1_CLEAN_ALL: 清除所有唤醒源位
+     *                  - M5PM1_CLEAN_ALL: Clear all wake source bits
+     * @return 成功返回 M5PM1_OK，否则返回错误码
+     *         Return M5PM1_OK on success, error code otherwise
      */
     m5pm1_err_t getWakeSource(uint8_t* src, m5pm1_clean_type_t cleanType = M5PM1_CLEAN_NONE);
     m5pm1_err_t clearWakeSource(uint8_t mask);
@@ -1257,10 +1275,18 @@ public:
     // IRQ Functions
     // ========================
     /**
-     * @brief Read GPIO interrupt status / 读取 GPIO 中断状态
-     * @param status Output: status bitmask / 输出: 状态位掩码
-     * @param cleanType Clean behavior after read / 读取后的清除行为
-     *                  M5PM1_CLEAN_NONE=不清除, M5PM1_CLEAN_TRIGGERED=清除触发位, M5PM1_CLEAN_ALL=清除全部
+     * @brief 读取 GPIO 中断状态
+     *        Read GPIO interrupt status
+     * @param status 输出：状态位掩码
+     *               Output: status bitmask
+     * @param cleanType 读取后的清除行为
+     *                  Clean behavior after read
+     *                  - M5PM1_CLEAN_NONE: 不清除
+     *                  - M5PM1_CLEAN_NONE: No clean
+     *                  - M5PM1_CLEAN_ONCE: 清除已触发位（一次清除）
+     *                  - M5PM1_CLEAN_ONCE: Clear triggered bits in this read (single operation)
+     *                  - M5PM1_CLEAN_ALL: 清除所有位
+     *                  - M5PM1_CLEAN_ALL: Clear all bits
      * @return 成功返回 M5PM1_OK，否则返回错误码
      *         Return M5PM1_OK on success, error code otherwise
      */
@@ -1268,10 +1294,18 @@ public:
     m5pm1_err_t irqClearGpio(uint8_t mask);
 
     /**
-     * @brief Read system interrupt status / 读取系统中断状态
-     * @param status Output: status bitmask / 输出: 状态位掩码
-     * @param cleanType Clean behavior after read / 读取后的清除行为
-     *                  M5PM1_CLEAN_NONE=不清除, M5PM1_CLEAN_TRIGGERED=清除触发位, M5PM1_CLEAN_ALL=清除全部
+     * @brief 读取系统中断状态
+     *        Read system interrupt status
+     * @param status 输出：状态位掩码
+     *               Output: status bitmask
+     * @param cleanType 读取后的清除行为
+     *                  Clean behavior after read
+     *                  - M5PM1_CLEAN_NONE: 不清除
+     *                  - M5PM1_CLEAN_NONE: No clean
+     *                  - M5PM1_CLEAN_ONCE: 清除已触发位（一次清除）
+     *                  - M5PM1_CLEAN_ONCE: Clear triggered bits in this read (single operation)
+     *                  - M5PM1_CLEAN_ALL: 清除所有位
+     *                  - M5PM1_CLEAN_ALL: Clear all bits
      * @return 成功返回 M5PM1_OK，否则返回错误码
      *         Return M5PM1_OK on success, error code otherwise
      */
@@ -1279,25 +1313,113 @@ public:
     m5pm1_err_t irqClearSys(uint8_t mask);
 
     /**
-     * @brief Read button interrupt status / 读取按钮中断状态
-     * @param status Output: status bitmask / 输出: 状态位掩码
-     * @param cleanType Clean behavior after read / 读取后的清除行为
-     *                  M5PM1_CLEAN_NONE=不清除, M5PM1_CLEAN_TRIGGERED=清除触发位, M5PM1_CLEAN_ALL=清除全部
+     * @brief 读取按钮中断状态
+     *        Read button interrupt status
+     * @param status 输出：状态位掩码
+     *               Output: status bitmask
+     * @param cleanType 读取后的清除行为
+     *                  Clean behavior after read
+     *                  - M5PM1_CLEAN_NONE: 不清除
+     *                  - M5PM1_CLEAN_NONE: No clean
+     *                  - M5PM1_CLEAN_ONCE: 清除已触发位（一次清除）
+     *                  - M5PM1_CLEAN_ONCE: Clear triggered bits in this read (single operation)
+     *                  - M5PM1_CLEAN_ALL: 清除所有位
+     *                  - M5PM1_CLEAN_ALL: Clear all bits
      * @return 成功返回 M5PM1_OK，否则返回错误码
      *         Return M5PM1_OK on success, error code otherwise
      */
     m5pm1_err_t irqGetBtnStatus(uint8_t* status, m5pm1_clean_type_t cleanType = M5PM1_CLEAN_NONE);
     m5pm1_err_t irqClearBtn(uint8_t mask);
 
+    // ========================
+    // 中断状态读取（枚举返回，用户友好）
+    // IRQ Status Read (Enum Return, User-Friendly)
+    // ========================
+    /**
+     * @brief 读取 GPIO 中断状态（返回枚举值，用户友好）
+     *        Read GPIO interrupt status (returns enum, user-friendly)
+     * @param gpio_num 输出：触发中断的 GPIO 枚举
+     *                 Output: triggered GPIO enum
+     * @param cleanType 清除类型
+     *                  Clean type
+     *                  - M5PM1_CLEAN_NONE: 不清除
+     *                  - M5PM1_CLEAN_NONE: No clean
+     *                  - M5PM1_CLEAN_ONCE: 清除当前返回的 GPIO 中断（从低位往高位逐个）
+     *                  - M5PM1_CLEAN_ONCE: Clean current GPIO (low to high, one at a time)
+     *                  - M5PM1_CLEAN_ALL: 清除所有 GPIO 中断
+     *                  - M5PM1_CLEAN_ALL: Clean all GPIO interrupts
+     * @return M5PM1_OK 成功，M5PM1_ERR_xxx 失败
+     *         M5PM1_OK on success, error code otherwise
+     * @note 如果有多个 GPIO 同时触发，每次调用返回一个（从低位到高位）
+     *       If multiple GPIOs triggered, returns one per call (low to high)
+     * @note 使用 M5PM1_CLEAN_ONCE 可以逐个处理多个中断
+     *       Use M5PM1_CLEAN_ONCE to handle multiple interrupts one by one
+     * @note 如果没有中断，返回 M5PM1_IRQ_GPIO_NONE
+     *       Returns M5PM1_IRQ_GPIO_NONE if no interrupt
+     */
+    m5pm1_err_t irqGetGpioStatusEnum(m5pm1_irq_gpio_t* gpio_num,
+                                      m5pm1_clean_type_t cleanType = M5PM1_CLEAN_NONE);
+
+    /**
+     * @brief 读取系统中断状态（返回枚举值，用户友好）
+     *        Read system interrupt status (returns enum, user-friendly)
+     * @param sys_irq 输出：触发中断的系统事件枚举
+     *                Output: triggered system event enum
+     * @param cleanType 清除类型
+     *                  Clean type
+     *                  - M5PM1_CLEAN_NONE: 不清除
+     *                  - M5PM1_CLEAN_NONE: No clean
+     *                  - M5PM1_CLEAN_ONCE: 清除当前返回的系统中断（从低位往高位逐个）
+     *                  - M5PM1_CLEAN_ONCE: Clean current event (low to high, one at a time)
+     *                  - M5PM1_CLEAN_ALL: 清除所有系统中断
+     *                  - M5PM1_CLEAN_ALL: Clean all system interrupts
+     * @return M5PM1_OK 成功，M5PM1_ERR_xxx 失败
+     *         M5PM1_OK on success, error code otherwise
+     * @note 如果有多个事件同时触发，每次调用返回一个（从低位到高位）
+     *       If multiple events triggered, returns one per call (low to high)
+     * @note 使用 M5PM1_CLEAN_ONCE 可以逐个处理多个中断
+     *       Use M5PM1_CLEAN_ONCE to handle multiple interrupts one by one
+     * @note 如果没有中断，返回 M5PM1_IRQ_SYS_NONE
+     *       Returns M5PM1_IRQ_SYS_NONE if no interrupt
+     */
+    m5pm1_err_t irqGetSysStatusEnum(m5pm1_irq_sys_t* sys_irq,
+                                     m5pm1_clean_type_t cleanType = M5PM1_CLEAN_NONE);
+
+    /**
+     * @brief 读取按钮中断状态（返回枚举值，用户友好）
+     *        Read button interrupt status (returns enum, user-friendly)
+     * @param btn_irq 输出：触发中断的按钮事件枚举
+     *                Output: triggered button event enum
+     * @param cleanType 清除类型
+     *                  Clean type
+     *                  - M5PM1_CLEAN_NONE: 不清除
+     *                  - M5PM1_CLEAN_NONE: No clean
+     *                  - M5PM1_CLEAN_ONCE: 清除当前返回的按钮中断（从低位往高位逐个）
+     *                  - M5PM1_CLEAN_ONCE: Clean current event (low to high, one at a time)
+     *                  - M5PM1_CLEAN_ALL: 清除所有按钮中断
+     *                  - M5PM1_CLEAN_ALL: Clean all button interrupts
+     * @return M5PM1_OK 成功，M5PM1_ERR_xxx 失败
+     *         M5PM1_OK on success, error code otherwise
+     * @note 如果有多个事件同时触发，每次调用返回一个（从低位到高位）
+     *       If multiple events triggered, returns one per call (low to high)
+     * @note 使用 M5PM1_CLEAN_ONCE 可以逐个处理多个中断
+     *       Use M5PM1_CLEAN_ONCE to handle multiple interrupts one by one
+     * @note 如果没有中断，返回 M5PM1_BTN_IRQ_NONE
+     *       Returns M5PM1_BTN_IRQ_NONE if no interrupt
+     */
+    m5pm1_err_t irqGetBtnStatusEnum(m5pm1_btn_irq_t* btn_irq,
+                                     m5pm1_clean_type_t cleanType = M5PM1_CLEAN_NONE);
+
+
     /**
      * @brief Set single GPIO pin interrupt mask / 设置单个 GPIO 引脚中断屏蔽
      * @param pin GPIO pin number (0-4) / GPIO 引脚号
-     * @param mask true=mask(disable), false=unmask(enable) / true=屏蔽, false=不屏蔽
+     * @param mask Mask control: M5PM1_IRQ_MASK_DISABLE(unmask) / M5PM1_IRQ_MASK_ENABLE(mask)
      * @return 成功返回 M5PM1_OK，否则返回错误码
      *         Return M5PM1_OK on success, error code otherwise
      */
-    m5pm1_err_t irqSetGpioMask(m5pm1_gpio_num_t pin, bool mask);
-    m5pm1_err_t irqGetGpioMask(m5pm1_gpio_num_t pin, bool* mask);
+    m5pm1_err_t irqSetGpioMask(m5pm1_gpio_num_t pin, m5pm1_irq_mask_ctrl_t mask);
+    m5pm1_err_t irqGetGpioMask(m5pm1_gpio_num_t pin, m5pm1_irq_mask_ctrl_t* mask);
 
     /**
      * @brief Set all GPIO interrupt mask at once / 一次性设置所有 GPIO 中断屏蔽
@@ -1311,12 +1433,12 @@ public:
     /**
      * @brief Set single system event interrupt mask / 设置单个系统事件中断屏蔽
      * @param event Event bit (0-5): 0=5VIN_IN, 1=5VIN_OUT, 2=5VINOUT_IN, 3=5VINOUT_OUT, 4=BAT_IN, 5=BAT_OUT
-     * @param mask true=mask(disable), false=unmask(enable)
+     * @param mask Mask control: M5PM1_IRQ_MASK_DISABLE(unmask) / M5PM1_IRQ_MASK_ENABLE(mask)
      * @return 成功返回 M5PM1_OK，否则返回错误码
      *         Return M5PM1_OK on success, error code otherwise
      */
-    m5pm1_err_t irqSetSysMask(uint8_t event, bool mask);
-    m5pm1_err_t irqGetSysMask(uint8_t event, bool* mask);
+    m5pm1_err_t irqSetSysMask(uint8_t event, m5pm1_irq_mask_ctrl_t mask);
+    m5pm1_err_t irqGetSysMask(uint8_t event, m5pm1_irq_mask_ctrl_t* mask);
 
     /**
      * @brief Set all system interrupt mask at once / 一次性设置所有系统中断屏蔽
@@ -1330,12 +1452,12 @@ public:
     /**
      * @brief Set single button event interrupt mask / 设置单个按钮事件中断屏蔽
      * @param type Button event type: M5PM1_BTN_IRQ_CLICK / WAKEUP / DOUBLE
-     * @param mask true=mask(disable), false=unmask(enable)
+     * @param mask Mask control: M5PM1_IRQ_MASK_DISABLE(unmask) / M5PM1_IRQ_MASK_ENABLE(mask)
      * @return 成功返回 M5PM1_OK，否则返回错误码
      *         Return M5PM1_OK on success, error code otherwise
      */
-    m5pm1_err_t irqSetBtnMask(m5pm1_btn_irq_t type, bool mask);
-    m5pm1_err_t irqGetBtnMask(m5pm1_btn_irq_t type, bool* mask);
+    m5pm1_err_t irqSetBtnMask(m5pm1_btn_irq_t type, m5pm1_irq_mask_ctrl_t mask);
+    m5pm1_err_t irqGetBtnMask(m5pm1_btn_irq_t type, m5pm1_irq_mask_ctrl_t* mask);
 
     /**
      * @brief Set all button interrupt mask at once / 一次性设置所有按钮中断屏蔽

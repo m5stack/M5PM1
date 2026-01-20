@@ -2570,10 +2570,12 @@ m5pm1_err_t M5PM1::getWakeSource(uint8_t* src, m5pm1_clean_type_t cleanType) {
     }
     if (!_readReg(M5PM1_REG_WAKE_SRC, src)) return M5PM1_ERR_I2C_COMM;
 
-    if (cleanType == M5PM1_CLEAN_TRIGGERED && *src != 0) {
+    if (cleanType == M5PM1_CLEAN_ONCE && *src != 0) {
         // 清除已触发的位（采用"写0清除"机制）
         // Clear triggered bits (using "write-0-to-clear" mechanism)
-        uint8_t new_val = ~(*src);  // 反转位：触发位变为0，未触发位变为1
+        // 反转位：触发位变为0，未触发位变为1
+        // Bit invert: triggered bits become 0, untriggered bits become 1
+        uint8_t new_val = ~(*src);
         if (!_writeReg(M5PM1_REG_WAKE_SRC, new_val)) return M5PM1_ERR_I2C_COMM;
     } else if (cleanType == M5PM1_CLEAN_ALL) {
         // 清除所有位（采用"写0清除"机制：写入0x00）
@@ -2950,10 +2952,12 @@ m5pm1_err_t M5PM1::irqGetGpioStatus(uint8_t* status, m5pm1_clean_type_t cleanTyp
     }
     if (!_readReg(M5PM1_REG_IRQ_STATUS1, status)) return M5PM1_ERR_I2C_COMM;
 
-    if (cleanType == M5PM1_CLEAN_TRIGGERED && *status != 0) {
+    if (cleanType == M5PM1_CLEAN_ONCE && *status != 0) {
         // 清除已触发的位（采用"写0清除"机制）
         // Clear triggered bits (using "write-0-to-clear" mechanism)
-        uint8_t new_val = ~(*status);  // 反转位：触发位变为0，未触发位变为1
+        // 反转位：触发位变为0，未触发位变为1
+        // Bit invert: triggered bits become 0, untriggered bits become 1
+        uint8_t new_val = ~(*status);
         if (!_writeReg(M5PM1_REG_IRQ_STATUS1, new_val)) return M5PM1_ERR_I2C_COMM;
     } else if (cleanType == M5PM1_CLEAN_ALL) {
         // 清除所有位（采用"写0清除"机制：写入0x00）
@@ -2995,10 +2999,12 @@ m5pm1_err_t M5PM1::irqGetSysStatus(uint8_t* status, m5pm1_clean_type_t cleanType
     }
     if (!_readReg(M5PM1_REG_IRQ_STATUS2, status)) return M5PM1_ERR_I2C_COMM;
 
-    if (cleanType == M5PM1_CLEAN_TRIGGERED && *status != 0) {
+    if (cleanType == M5PM1_CLEAN_ONCE && *status != 0) {
         // 清除已触发的位（采用"写0清除"机制）
         // Clear triggered bits (using "write-0-to-clear" mechanism)
-        uint8_t new_val = ~(*status);  // 反转位：触发位变为0，未触发位变为1
+        // 反转位：触发位变为0，未触发位变为1
+        // Bit invert: triggered bits become 0, untriggered bits become 1
+        uint8_t new_val = ~(*status);
         if (!_writeReg(M5PM1_REG_IRQ_STATUS2, new_val)) return M5PM1_ERR_I2C_COMM;
     } else if (cleanType == M5PM1_CLEAN_ALL) {
         // 清除所有位（采用"写0清除"机制：写入0x00）
@@ -3040,10 +3046,12 @@ m5pm1_err_t M5PM1::irqGetBtnStatus(uint8_t* status, m5pm1_clean_type_t cleanType
     }
     if (!_readReg(M5PM1_REG_IRQ_STATUS3, status)) return M5PM1_ERR_I2C_COMM;
 
-    if (cleanType == M5PM1_CLEAN_TRIGGERED && *status != 0) {
+    if (cleanType == M5PM1_CLEAN_ONCE && *status != 0) {
         // 清除已触发的位（采用"写0清除"机制）
         // Clear triggered bits (using "write-0-to-clear" mechanism)
-        uint8_t new_val = ~(*status);  // 反转位：触发位变为0，未触发位变为1
+        // 反转位：触发位变为0，未触发位变为1
+        // Bit invert: triggered bits become 0, untriggered bits become 1
+        uint8_t new_val = ~(*status);
         if (!_writeReg(M5PM1_REG_IRQ_STATUS3, new_val)) return M5PM1_ERR_I2C_COMM;
     } else if (cleanType == M5PM1_CLEAN_ALL) {
         // 清除所有位（采用"写0清除"机制：写入0x00）
@@ -3074,7 +3082,166 @@ m5pm1_err_t M5PM1::irqClearBtn(uint8_t mask) {
     return M5PM1_OK;
 }
 
-m5pm1_err_t M5PM1::irqSetGpioMask(m5pm1_gpio_num_t pin, bool mask) {
+// ============================
+// 中断状态读取（枚举返回，用户友好）
+// IRQ Status Read (Enum Return, User-Friendly)
+// ============================
+
+m5pm1_err_t M5PM1::irqGetGpioStatusEnum(m5pm1_irq_gpio_t* gpio_num,
+                                         m5pm1_clean_type_t cleanType) {
+    // 参数验证
+    // Parameter validation
+    if (gpio_num == nullptr) {
+        M5PM1_LOG_E(TAG, "irqGetGpioStatusEnum gpio_num is null");
+        return M5PM1_ERR_INVALID_ARG;
+    }
+    if (!_initialized) {
+        M5PM1_LOG_E(TAG, "Not initialized");
+        return M5PM1_ERR_NOT_INIT;
+    }
+
+    // 读取 GPIO 中断状态寄存器
+    // Read GPIO interrupt status register
+    uint8_t irq_status;
+    if (!_readReg(M5PM1_REG_IRQ_STATUS1, &irq_status)) {
+        return M5PM1_ERR_I2C_COMM;
+    }
+
+    // 从低位往高位查找第一个触发的 GPIO
+    // Find first triggered GPIO from low to high
+    *gpio_num = M5PM1_IRQ_GPIO_NONE;
+    for (int i = 0; i < 5; i++) {
+        if (irq_status & (1 << i)) {
+            *gpio_num = (m5pm1_irq_gpio_t)(1 << i);
+            break;
+        }
+    }
+
+    // 根据 cleanType 清除中断
+    // Clear interrupt based on cleanType
+    if (cleanType == M5PM1_CLEAN_ONCE && *gpio_num != M5PM1_IRQ_GPIO_NONE) {
+        // 清除当前返回的 GPIO 中断（写0清除机制）
+        // Clear current GPIO interrupt (write-0-to-clear mechanism)
+        uint8_t new_val = irq_status & ~(*gpio_num);
+        if (!_writeReg(M5PM1_REG_IRQ_STATUS1, new_val)) {
+            return M5PM1_ERR_I2C_COMM;
+        }
+    } else if (cleanType == M5PM1_CLEAN_ALL) {
+        // 清除所有 GPIO 中断
+        // Clear all GPIO interrupts
+        if (!_writeReg(M5PM1_REG_IRQ_STATUS1, 0x00)) {
+            return M5PM1_ERR_I2C_COMM;
+        }
+    }
+
+    _autoSnapshotUpdate(M5PM1_SNAPSHOT_DOMAIN_IRQ_STATUS);
+    return M5PM1_OK;
+}
+
+m5pm1_err_t M5PM1::irqGetSysStatusEnum(m5pm1_irq_sys_t* sys_irq,
+                                        m5pm1_clean_type_t cleanType) {
+    // 参数验证
+    // Parameter validation
+    if (sys_irq == nullptr) {
+        M5PM1_LOG_E(TAG, "irqGetSysStatusEnum sys_irq is null");
+        return M5PM1_ERR_INVALID_ARG;
+    }
+    if (!_initialized) {
+        M5PM1_LOG_E(TAG, "Not initialized");
+        return M5PM1_ERR_NOT_INIT;
+    }
+
+    // 读取系统中断状态寄存器
+    // Read system interrupt status register
+    uint8_t irq_status;
+    if (!_readReg(M5PM1_REG_IRQ_STATUS2, &irq_status)) {
+        return M5PM1_ERR_I2C_COMM;
+    }
+
+    // 从低位往高位查找第一个触发的系统事件
+    // Find first triggered system event from low to high
+    *sys_irq = M5PM1_IRQ_SYS_NONE;
+    for (int i = 0; i < 6; i++) {
+        if (irq_status & (1 << i)) {
+            *sys_irq = (m5pm1_irq_sys_t)(1 << i);
+            break;
+        }
+    }
+
+    // 根据 cleanType 清除中断
+    // Clear interrupt based on cleanType
+    if (cleanType == M5PM1_CLEAN_ONCE && *sys_irq != M5PM1_IRQ_SYS_NONE) {
+        // 清除当前返回的系统中断（写0清除机制）
+        // Clear current system interrupt (write-0-to-clear mechanism)
+        uint8_t new_val = irq_status & ~(*sys_irq);
+        if (!_writeReg(M5PM1_REG_IRQ_STATUS2, new_val)) {
+            return M5PM1_ERR_I2C_COMM;
+        }
+    } else if (cleanType == M5PM1_CLEAN_ALL) {
+        // 清除所有系统中断
+        // Clear all system interrupts
+        if (!_writeReg(M5PM1_REG_IRQ_STATUS2, 0x00)) {
+            return M5PM1_ERR_I2C_COMM;
+        }
+    }
+
+    _autoSnapshotUpdate(M5PM1_SNAPSHOT_DOMAIN_IRQ_STATUS);
+    return M5PM1_OK;
+}
+
+m5pm1_err_t M5PM1::irqGetBtnStatusEnum(m5pm1_btn_irq_t* btn_irq,
+                                        m5pm1_clean_type_t cleanType) {
+    // 参数验证
+    // Parameter validation
+    if (btn_irq == nullptr) {
+        M5PM1_LOG_E(TAG, "irqGetBtnStatusEnum btn_irq is null");
+        return M5PM1_ERR_INVALID_ARG;
+    }
+    if (!_initialized) {
+        M5PM1_LOG_E(TAG, "Not initialized");
+        return M5PM1_ERR_NOT_INIT;
+    }
+
+    // 读取按钮中断状态寄存器
+    // Read button interrupt status register
+    uint8_t irq_status;
+    if (!_readReg(M5PM1_REG_IRQ_STATUS3, &irq_status)) {
+        return M5PM1_ERR_I2C_COMM;
+    }
+
+    // 从低位往高位查找第一个触发的按钮事件
+    // Find first triggered button event from low to high
+    *btn_irq = M5PM1_BTN_IRQ_NONE;
+    for (int i = 0; i < 3; i++) {
+        if (irq_status & (1 << i)) {
+            *btn_irq = (m5pm1_btn_irq_t)(1 << i);
+            break;
+        }
+    }
+
+    // 根据 cleanType 清除中断
+    // Clear interrupt based on cleanType
+    if (cleanType == M5PM1_CLEAN_ONCE && *btn_irq != M5PM1_BTN_IRQ_NONE) {
+        // 清除当前返回的按钮中断（写0清除机制）
+        // Clear current button interrupt (write-0-to-clear mechanism)
+        uint8_t new_val = irq_status & ~(*btn_irq);
+        if (!_writeReg(M5PM1_REG_IRQ_STATUS3, new_val)) {
+            return M5PM1_ERR_I2C_COMM;
+        }
+    } else if (cleanType == M5PM1_CLEAN_ALL) {
+        // 清除所有按钮中断
+        // Clear all button interrupts
+        if (!_writeReg(M5PM1_REG_IRQ_STATUS3, 0x00)) {
+            return M5PM1_ERR_I2C_COMM;
+        }
+    }
+
+    _autoSnapshotUpdate(M5PM1_SNAPSHOT_DOMAIN_IRQ_STATUS);
+    return M5PM1_OK;
+}
+
+
+m5pm1_err_t M5PM1::irqSetGpioMask(m5pm1_gpio_num_t pin, m5pm1_irq_mask_ctrl_t mask) {
     if (!_isValidPin(pin)) return M5PM1_ERR_INVALID_ARG;
     if (!_initialized) {
         M5PM1_LOG_E(TAG, "Not initialized");
@@ -3084,7 +3251,7 @@ m5pm1_err_t M5PM1::irqSetGpioMask(m5pm1_gpio_num_t pin, bool mask) {
     uint8_t regVal;
     if (!_readReg(M5PM1_REG_IRQ_MASK1, &regVal)) return M5PM1_ERR_I2C_COMM;
 
-    if (mask) {
+    if (mask == M5PM1_IRQ_MASK_ENABLE) {
         regVal |= (1 << pin);
     } else {
         regVal &= ~(1 << pin);
@@ -3098,7 +3265,7 @@ m5pm1_err_t M5PM1::irqSetGpioMask(m5pm1_gpio_num_t pin, bool mask) {
     return M5PM1_OK;
 }
 
-m5pm1_err_t M5PM1::irqGetGpioMask(m5pm1_gpio_num_t pin, bool* mask) {
+m5pm1_err_t M5PM1::irqGetGpioMask(m5pm1_gpio_num_t pin, m5pm1_irq_mask_ctrl_t* mask) {
     if (mask == nullptr) return M5PM1_ERR_INVALID_ARG;
     if (!_isValidPin(pin)) return M5PM1_ERR_INVALID_ARG;
     if (!_initialized) {
@@ -3109,7 +3276,7 @@ m5pm1_err_t M5PM1::irqGetGpioMask(m5pm1_gpio_num_t pin, bool* mask) {
     uint8_t regVal;
     if (!_readReg(M5PM1_REG_IRQ_MASK1, &regVal)) return M5PM1_ERR_I2C_COMM;
 
-    *mask = (regVal >> pin) & 0x01;
+    *mask = (m5pm1_irq_mask_ctrl_t)((regVal >> pin) & 0x01);
     return M5PM1_OK;
 }
 
@@ -3136,7 +3303,7 @@ m5pm1_err_t M5PM1::irqGetGpioMaskAll(uint8_t* mask) {
     return M5PM1_OK;
 }
 
-m5pm1_err_t M5PM1::irqSetSysMask(uint8_t event, bool mask) {
+m5pm1_err_t M5PM1::irqSetSysMask(uint8_t event, m5pm1_irq_mask_ctrl_t mask) {
     if (event > 5) return M5PM1_ERR_INVALID_ARG;
     if (!_initialized) {
         M5PM1_LOG_E(TAG, "Not initialized");
@@ -3146,7 +3313,7 @@ m5pm1_err_t M5PM1::irqSetSysMask(uint8_t event, bool mask) {
     uint8_t regVal;
     if (!_readReg(M5PM1_REG_IRQ_MASK2, &regVal)) return M5PM1_ERR_I2C_COMM;
 
-    if (mask) {
+    if (mask == M5PM1_IRQ_MASK_ENABLE) {
         regVal |= (1 << event);
     } else {
         regVal &= ~(1 << event);
@@ -3160,7 +3327,7 @@ m5pm1_err_t M5PM1::irqSetSysMask(uint8_t event, bool mask) {
     return M5PM1_OK;
 }
 
-m5pm1_err_t M5PM1::irqGetSysMask(uint8_t event, bool* mask) {
+m5pm1_err_t M5PM1::irqGetSysMask(uint8_t event, m5pm1_irq_mask_ctrl_t* mask) {
     if (mask == nullptr) return M5PM1_ERR_INVALID_ARG;
     if (event > 5) return M5PM1_ERR_INVALID_ARG;
     if (!_initialized) {
@@ -3171,7 +3338,7 @@ m5pm1_err_t M5PM1::irqGetSysMask(uint8_t event, bool* mask) {
     uint8_t regVal;
     if (!_readReg(M5PM1_REG_IRQ_MASK2, &regVal)) return M5PM1_ERR_I2C_COMM;
 
-    *mask = (regVal >> event) & 0x01;
+    *mask = (m5pm1_irq_mask_ctrl_t)((regVal >> event) & 0x01);
     return M5PM1_OK;
 }
 
@@ -3198,7 +3365,7 @@ m5pm1_err_t M5PM1::irqGetSysMaskAll(uint8_t* mask) {
     return M5PM1_OK;
 }
 
-m5pm1_err_t M5PM1::irqSetBtnMask(m5pm1_btn_irq_t type, bool mask) {
+m5pm1_err_t M5PM1::irqSetBtnMask(m5pm1_btn_irq_t type, m5pm1_irq_mask_ctrl_t mask) {
     if (type > M5PM1_BTN_IRQ_DOUBLE) return M5PM1_ERR_INVALID_ARG;
     if (!_initialized) {
         M5PM1_LOG_E(TAG, "Not initialized");
@@ -3208,7 +3375,7 @@ m5pm1_err_t M5PM1::irqSetBtnMask(m5pm1_btn_irq_t type, bool mask) {
     uint8_t regVal;
     if (!_readReg(M5PM1_REG_IRQ_MASK3, &regVal)) return M5PM1_ERR_I2C_COMM;
 
-    if (mask) {
+    if (mask == M5PM1_IRQ_MASK_ENABLE) {
         regVal |= (1 << (uint8_t)type);
     } else {
         regVal &= ~(1 << (uint8_t)type);
@@ -3222,7 +3389,7 @@ m5pm1_err_t M5PM1::irqSetBtnMask(m5pm1_btn_irq_t type, bool mask) {
     return M5PM1_OK;
 }
 
-m5pm1_err_t M5PM1::irqGetBtnMask(m5pm1_btn_irq_t type, bool* mask) {
+m5pm1_err_t M5PM1::irqGetBtnMask(m5pm1_btn_irq_t type, m5pm1_irq_mask_ctrl_t* mask) {
     if (mask == nullptr) return M5PM1_ERR_INVALID_ARG;
     if (type > M5PM1_BTN_IRQ_DOUBLE) return M5PM1_ERR_INVALID_ARG;
     if (!_initialized) {
@@ -3233,7 +3400,7 @@ m5pm1_err_t M5PM1::irqGetBtnMask(m5pm1_btn_irq_t type, bool* mask) {
     uint8_t regVal;
     if (!_readReg(M5PM1_REG_IRQ_MASK3, &regVal)) return M5PM1_ERR_I2C_COMM;
 
-    *mask = (regVal >> (uint8_t)type) & 0x01;
+    *mask = (m5pm1_irq_mask_ctrl_t)((regVal >> (uint8_t)type) & 0x01);
     return M5PM1_OK;
 }
 
