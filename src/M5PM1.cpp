@@ -107,8 +107,8 @@ m5pm1_log_level_t M5PM1::getLogLevel()
 }
 
 // ============================
-// Constructor / Destructor
 // 构造函数 / 析构函数
+// Constructor / Destructor
 // ============================
 
 M5PM1::M5PM1() {
@@ -1149,14 +1149,14 @@ void M5PM1::_initPinCache() {
 }
 
 bool M5PM1::_readBtnStatus(uint8_t* rawValue) {
-    // Read BTN_STATUS register and update internal BTN_FLAG cache
     // 读取 BTN_STATUS 寄存器并更新内部 BTN_FLAG 缓存
+    // Read BTN_STATUS register and update internal BTN_FLAG cache
     uint8_t val;
     if (!_readReg(M5PM1_REG_BTN_STATUS, &val)) {
         return false;
     }
-    // If BTN_FLAG bit is set, accumulate to cache
     // 如果 BTN_FLAG 位被置位，累积到缓存
+    // If BTN_FLAG bit is set, accumulate to cache
     if (val & 0x80) {
         _btnFlagCache = true;
     }
@@ -1353,8 +1353,8 @@ bool M5PM1::_readBytes(uint8_t reg, uint8_t* data, uint8_t len) {
 }
 
 // ============================
-// Device Information
 // 设备信息
+// Device Information
 // ============================
 
 m5pm1_err_t M5PM1::getDeviceId(uint8_t* id) {
@@ -2542,8 +2542,8 @@ m5pm1_err_t M5PM1::read5VInOut(uint16_t* mv) {
 }
 
 // ============================
-// Power Management
 // 电源管理
+// Power Management
 // ============================
 
 m5pm1_err_t M5PM1::getPowerSource(m5pm1_pwr_src_t* src) {
@@ -2667,21 +2667,21 @@ m5pm1_err_t M5PM1::setLedEnLevel(bool level) {
 // ============================
 
 m5pm1_err_t M5PM1::setBatteryLvp(uint16_t mv) {
-    // Check if initialized / 检查初始化状态
+    // 检查初始化状态 / Check if initialized
     if (!_initialized) {
         M5PM1_LOG_E(TAG, "Not initialized");
         return M5PM1_ERR_NOT_INIT;
     }
 
-    // Validate voltage range / 验证电压范围 (2000-4000 mV)
+    // 验证电压范围 (2000-4000 mV) / Validate voltage range
     if (mv < 2000 || mv > 4000) {
         M5PM1_LOG_E(TAG, "Invalid battery LVP value: %u mV (valid range: 2000-4000 mV)", mv);
         return M5PM1_ERR_INVALID_ARG;
     }
 
-    // Calculate register value / 计算寄存器值
-    // Formula: (voltage_mv - 2000) / 7.81 ≈ (voltage_mv - 2000) * 100 / 781
+    // 计算寄存器值 / Calculate register value
     // 公式: (电压_mV - 2000) / 7.81 ≈ (电压_mV - 2000) * 100 / 781
+    // Formula: (voltage_mv - 2000) / 7.81 ≈ (voltage_mv - 2000) * 100 / 781
     uint8_t lvp = (uint8_t)((mv - 2000) * 100 / 781);
 
     if (!_writeReg(M5PM1_REG_BATT_LVP, lvp)) return M5PM1_ERR_I2C_COMM;
@@ -2727,19 +2727,19 @@ m5pm1_err_t M5PM1::wdtGetCount(uint8_t* count) {
 // ============================
 
 m5pm1_err_t M5PM1::timerSet(uint32_t seconds, m5pm1_tim_action_t action) {
-    // Check if initialized / 检查初始化状态
+    // 检查初始化状态 / Check if initialized
     if (!_initialized) {
         M5PM1_LOG_E(TAG, "Not initialized");
         return M5PM1_ERR_NOT_INIT;
     }
 
-    // Validate timer count / 验证定时器计数值 (31-bit: 0-0x7FFFFFFF)
+    // 验证定时器计数值 (31-bit: 0-0x7FFFFFFF) / Validate timer count
     if (seconds > 0x7FFFFFFF) {
         M5PM1_LOG_E(TAG, "Invalid timer count: %lu (max 0x7FFFFFFF, ~68 years)", seconds);
         return M5PM1_ERR_INVALID_ARG;
     }
 
-    // Write 31-bit timer value / 写入31位定时器值
+    // 写入31位定时器值 / Write 31-bit timer value
     uint8_t data[4];
     data[0] = (seconds >> 0) & 0xFF;
     data[1] = (seconds >> 8) & 0xFF;
@@ -2748,14 +2748,14 @@ m5pm1_err_t M5PM1::timerSet(uint32_t seconds, m5pm1_tim_action_t action) {
 
     if (!_writeBytes(M5PM1_REG_TIM_CNT_0, data, 4)) return M5PM1_ERR_I2C_COMM;
 
-    // Configure timer / 配置定时器
+    // 配置定时器 / Configure timer
     // bit[3] ARM=1: 启动定时器 / Start timer
     // bit[2:0] ACTION: 定时器动作 / Timer action
     uint8_t cfg = 0x08 | (uint8_t)action;  // ARM=1, set ACTION
 
     if (!_writeReg(M5PM1_REG_TIM_CFG, cfg)) return M5PM1_ERR_I2C_COMM;
 
-    // Reload timer / 重载定时器
+    // 重载定时器 / Reload timer
     if (!_writeReg(M5PM1_REG_TIM_KEY, M5PM1_TIM_RELOAD_KEY)) return M5PM1_ERR_I2C_COMM;
     return M5PM1_OK;
 }
@@ -2782,13 +2782,13 @@ m5pm1_err_t M5PM1::timerClear() {
 // ============================
 
 m5pm1_err_t M5PM1::btnSetConfig(m5pm1_btn_type_t type, m5pm1_btn_delay_t delay) {
-    // Check if initialized / 检查初始化状态
+    // 检查初始化状态 / Check if initialized
     if (!_initialized) {
         M5PM1_LOG_E(TAG, "Not initialized");
         return M5PM1_ERR_NOT_INIT;
     }
 
-    // Validate button type / 验证按钮类型
+    // 验证按钮类型 / Validate button type
     uint8_t shift;
     switch (type) {
         case M5PM1_BTN_TYPE_CLICK:
@@ -2805,17 +2805,17 @@ m5pm1_err_t M5PM1::btnSetConfig(m5pm1_btn_type_t type, m5pm1_btn_delay_t delay) 
             return M5PM1_ERR_INVALID_ARG;
     }
 
-    // Validate delay configuration / 验证延迟配置 (0-3)
+    // 验证延迟配置 (0-3) / Validate delay configuration
     if (delay > M5PM1_BTN_DELAY_1000MS) {
         M5PM1_LOG_E(TAG, "Invalid delay value: %d (valid range: 0-3)", delay);
         return M5PM1_ERR_INVALID_ARG;
     }
 
-    // Read current register value / 读取当前寄存器值
+    // 读取当前寄存器值 / Read current register value
     uint8_t regVal;
     if (!_readReg(M5PM1_REG_BTN_CFG_1, &regVal)) return M5PM1_ERR_I2C_COMM;
 
-    // Update delay bits / 更新延迟位
+    // 更新延迟位 / Update delay bits
     regVal &= ~(0x03 << shift);
     regVal |= ((uint8_t)delay << shift);
 
@@ -2831,8 +2831,8 @@ m5pm1_err_t M5PM1::btnGetState(bool* pressed) {
         return M5PM1_ERR_NOT_INIT;
     }
     uint8_t val;
-    // Use internal function to read register and maintain BTN_FLAG cache
     // 使用内部函数读取寄存器并维护 BTN_FLAG 缓存
+    // Use internal function to read register and maintain BTN_FLAG cache
     if (!_readBtnStatus(&val)) return M5PM1_ERR_I2C_COMM;
     // bit0: 0=释放, 1=按下
     // bit0: 0=released, 1=pressed
@@ -2847,16 +2847,16 @@ m5pm1_err_t M5PM1::btnGetFlag(bool* wasPressed) {
         return M5PM1_ERR_NOT_INIT;
     }
     uint8_t val;
-    // Use internal function to read register and update BTN_FLAG cache
     // 使用内部函数读取寄存器并更新 BTN_FLAG 缓存
+    // Use internal function to read register and update BTN_FLAG cache
     if (!_readBtnStatus(&val)) return M5PM1_ERR_I2C_COMM;
     
-    // Check if BTN_FLAG was set (either from this read or cached from previous reads)
     // 检查 BTN_FLAG 是否被置位（无论是本次读取还是之前缓存的）
+    // Check if BTN_FLAG was set (either from this read or cached from previous reads)
     *wasPressed = _btnFlagCache;
     
-    // Clear cache after reporting (consume the flag)
     // 报告后清除缓存（消耗该标志）
+    // Clear cache after reporting (consume the flag)
     _btnFlagCache = false;
     
     return M5PM1_OK;
@@ -3442,8 +3442,8 @@ m5pm1_err_t M5PM1::irqGetBtnMaskAll(uint8_t* mask) {
 }
 
 // ============================
-// System Commands
 // 系统命令
+// System Commands
 // ============================
 
 m5pm1_err_t M5PM1::sysCmd(m5pm1_sys_cmd_t cmd) {
@@ -3855,8 +3855,8 @@ m5pm1_err_t M5PM1::readRtcRAM(uint8_t offset, uint8_t* data, uint8_t len) {
 }
 
 // ============================
-// I2C Configuration
 // I2C 配置
+// I2C Configuration
 // ============================
 
  m5pm1_err_t M5PM1::setI2cConfig(uint8_t sleepTime, m5pm1_i2c_speed_t speed) {
