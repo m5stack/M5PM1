@@ -3575,6 +3575,7 @@ m5pm1_err_t M5PM1::sysCmd(m5pm1_sys_cmd_t cmd)
         M5PM1_LOG_E(TAG, "Not initialized");
         return M5PM1_ERR_NOT_INIT;
     }
+    M5PM1_DELAY_MS(100);
     uint8_t val = M5PM1_SYS_CMD_KEY | (uint8_t)cmd;
     if (!_writeReg(M5PM1_REG_SYS_CMD, val)) {
         return M5PM1_ERR_I2C_COMM;
@@ -3605,6 +3606,13 @@ m5pm1_err_t M5PM1::setDownloadLock(bool lock)
     }
     uint8_t regVal;
     if (!_readReg(M5PM1_REG_BTN_CFG_1, &regVal)) return M5PM1_ERR_I2C_COMM;
+
+    // 检查锁定逻辑: 一旦锁定(变为1)，除断电外无法解锁(变为0)
+    // Check lock logic: Once locked (set to 1), it cannot be unlocked (set to 0) until power cycle
+    if ((regVal & 0x80) && !lock) {
+        M5PM1_LOG_E(TAG, "Download lock is permanent until power cycle");
+        return M5PM1_ERR_RULE_VIOLATION;
+    }
 
     if (lock) {
         regVal |= 0x80;  // DL_LOCK is bit 7

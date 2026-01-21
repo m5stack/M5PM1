@@ -4,7 +4,7 @@
 
 - **版本**: 1.0.1
 - **默认 I2C 地址**: `0x6E`
-- **I2C 速度**: 默认 100 kHz，可切换 400 kHz（切换后需重新初始化 I2C）
+- **I2C 速度**: 默认 100 kHz，可切换 400 kHz（切换后库内部会处理 I2C 重建）
 
 ## 项目结构与角色
 
@@ -86,8 +86,8 @@
 ### 10) 按钮
 
 - `btnSetConfig`/`btnGetState`/`btnGetFlag`
-- `setSingleResetDisable`/`getSingleResetDisable`
-- `setDoubleOffDisable`/`getDoubleOffDisable`
+- `setSingleResetDisable`（高危）/`getSingleResetDisable`
+- `setDoubleOffDisable`（高危）/`getDoubleOffDisable`
 
 ### 11) 中断
 
@@ -105,7 +105,7 @@
 ### 12) 系统命令
 
 - `sysCmd`/`shutdown`/`reboot`/`enterDownloadMode`
-- `setDownloadLock`/`getDownloadLock`
+- `setDownloadLock`（高危）/`getDownloadLock`
 
 ### 13) NeoPixel
 
@@ -134,17 +134,21 @@
 - `getCachedPowerConfig`/`getCachedButtonConfig`
 - `getCachedIrqMasks`/`getCachedIrqStatus`
 
+## 注意事项
+
+如果使用 `setDownloadLock`、`setSingleResetDisable`、`setDoubleOffDisable` 高危函数导致无法启用烧录、单击复位、双击关断，请拔插电池（内置电池设备可能损坏壳体和器件）或快速短接 BAT 和 GND（此操作可能损坏电池）。
+
 ## 引脚与功能限制
 
 | 功能区域 | 说明 | 备注 |
 | :--- | :--- | :--- |
-| **GPIO 互斥** | GPIO0/2 共享 WAKE/IRQ 线；GPIO3/4 互斥 | GPIO0/2 互斥 |
-| **唤醒 (WAKE)** | GPIO0, GPIO2 支持唤醒 | GPIO1 不支持 WAKE |
+| **WAKE 互斥** | GPIO0/2 互斥；GPIO3/4 互斥 | 仅 WAKE 功能生效 |
+| **唤醒 (WAKE)** | GPIO0/2/3/4 支持唤醒 | GPIO1 不支持 WAKE |
 | **ADC 通道** | GPIO1=ADC1, GPIO2=ADC2 | 温度为内部通道 |
 | **PWM 通道** | GPIO3=PWM0, GPIO4=PWM1 | 频率全通道共享 |
-| **NeoPixel** | 数据区 0x60 - 0x9F | 刷新时 I2C 短暂不可中断 |
-| **I2C 休眠** | 空闲超时可进入低功耗 | PWM 使能或下载模式下禁止休眠 |
-| **寄存器区块** | 0x00 - 0x0C, 0x10 - 0x19, 0x20 - 0x2A, 0x30 - 0x35  0x38 - 0x3D, 0x40 - 0x45, 0x48 - 0x4A, 0x50  0x53, 0x60 - 0x9F, 0xA0 - 0xBF | 支持连续读写 |
+| **NeoPixel** | 仅 GPIO0 支持；LED 数量 1-31；数据区 0x60 - 0x9F | 刷新时 I2C 短暂不可中断 |
+| **I2C 休眠** | 空闲超时可进入低功耗 | PWM 使能或下载模式下休眠失效 |
+| **寄存器区块** | 0x00 - 0x0C, 0x10 - 0x19, 0x20 - 0x2A, 0x30 - 0x35, 0x38 - 0x3D, 0x40 - 0x45, 0x48 - 0x4A, 0x50, 0x53, 0x60 - 0x9F, 0xA0 - 0xBF | 支持连续读写 |
 
 ## 版本与依赖
 

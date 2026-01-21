@@ -8,7 +8,8 @@ M5PM1 is a dual-platform (ESP-IDF & Arduino) driver library for M5Stack PM1 Powe
 
 ## Related Link
 
-- N/A
+- [README_FUNCTION_CN](README_FUNCTION_CN.md)
+- [README_FUNCTION_EN](README_FUNCTION_EN.md)
 
 ## Required Libraries:
 
@@ -18,8 +19,8 @@ M5PM1 is a dual-platform (ESP-IDF & Arduino) driver library for M5Stack PM1 Powe
 
 - examples/basic_power_adc/basic_power_adc.ino
 - examples/gpio_pwm/gpio_pwm.ino
-- examples/interrupt_button_sleep/interrupt_button_sleep.ino
 - examples/neopixel/neopixel.ino
+- examples/usb_interrupt_sleep/usb_interrupt_sleep.ino
 
 ## License
 

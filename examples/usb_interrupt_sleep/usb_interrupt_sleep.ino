@@ -8,14 +8,20 @@
 #include <M5PM1.h>
 
 /*
- * 中断/按键/关机与唤醒示例。
- * Interrupt/button/sleep & wake demo.
+ * USB拔插中断/关机与唤醒示例。
+ * USB Plug/Unplug Interrupt/Shutdown & Wake Demo.
  *
- * IRQ_GPIO=GPIO2 用于外部中断/唤醒输入；GPIO0/2 共用线，勿同时启用唤醒。
- * IRQ_GPIO=GPIO2 for external IRQ/wake; GPIO0/2 share a line, don't enable both.
+ * 功能：
+ * 1. 启动时打印唤醒源。
+ * 2. 运行时监听 USB (5VIN) 的拔插事件。
+ * 3. 当检测到 USB 拔出 (5VIN Remove) 时，倒计时5秒后关机。
+ * 4. 关机前设置10秒定时器唤醒，10秒后自动开机。
  *
- * 双击电源键触发 PM1 关机（延迟5秒），10 秒后定时唤醒。
- * Double-click power button triggers PM1 shutdown (5s delay); timer wakes after 10s.
+ * Features:
+ * 1. Print wake source on startup.
+ * 2. Listen for USB (5VIN) plug/unplug events.
+ * 3. When USB unplug (5VIN Remove) detected, shutdown after 5s countdown.
+ * 4. Set 10s timer wake up before shutdown, auto wake up after 10s.
  */
 
 M5PM1 pm1;
@@ -43,8 +49,7 @@ void IRAM_ATTR pm1_irq_handler()
     irqFlag = true;
 }
 
-static const m5pm1_gpio_num_t IRQ_GPIO = M5PM1_GPIO_NUM_1;
-static const uint32_t WAKE_TIMER_SEC   = 10;
+static const uint32_t WAKE_TIMER_SEC = 10;
 
 static void printDivider()
 {
@@ -65,23 +70,25 @@ static void printWakeSource(uint8_t src)
 
 static void enterSleep()
 {
-    LOGW("Prepare for shutdown with wake sources");
+    LOGW("Prepare for shutdown...");
 
     // 先配置10s的定时开机
     // Configure 10s timer wake up first
     pm1.timerSet(WAKE_TIMER_SEC, M5PM1_TIM_ACTION_POWERON);
 
-    // 触发双击后等待5s关机
-    // Wait 5s before shutdown after double click
-    LOGW("Wait 5s before shutdown...");
-    delay(5000);
+    // 等待5s关机
+    // Wait 5s before shutdown
+    for (int i = 5; i > 0; i--) {
+        LOGW("Shutdown in %d s...", i);
+        delay(1000);
+    }
 
     // 关闭LED_EN灯显（将默认电平配置为低电平）
     // Turn off LED_EN indicator (by setting default level to LOW)
     pm1.setLedEnLevel(false);
     vTaskDelay(100 / portTICK_PERIOD_MS);
 
-    LOGW("Shutdown now. Wake by GPIO%u or %us timer", IRQ_GPIO, WAKE_TIMER_SEC);
+    LOGW("Shutdown now. Wake by %us timer", WAKE_TIMER_SEC);
     pm1.shutdown();
 }
 
@@ -90,7 +97,7 @@ void setup()
     Serial.begin(115200);
     delay(200);
     printDivider();
-    LOGI("Interrupt + Button + Sleep demo start");
+    LOGI("USB Interrupt + Sleep demo start");
 
     m5pm1_err_t err = pm1.begin(&Wire, M5PM1_DEFAULT_ADDR, PM1_I2C_SDA, PM1_I2C_SCL, PM1_I2C_FREQ);
     if (err != M5PM1_OK) {
@@ -111,35 +118,27 @@ void setup()
     // Clear timer settings to avoid mis-trigger.
     pm1.timerClear();
 
-    // 禁用单击复位/双击关机，避免与示例流程冲突。
-    // Disable single-reset/double-off to avoid conflicts with demo flow.
-    pm1.setSingleResetDisable(true);
-    pm1.setDoubleOffDisable(true);
-
-    pm1.btnSetConfig(M5PM1_BTN_TYPE_CLICK, M5PM1_BTN_DELAY_250MS);
-    pm1.btnSetConfig(M5PM1_BTN_TYPE_DOUBLE, M5PM1_BTN_DELAY_250MS);
-    pm1.btnSetConfig(M5PM1_BTN_TYPE_LONG, M5PM1_BTN_DELAY_500MS);
-
-    pm1.gpioSetFunc(IRQ_GPIO, M5PM1_GPIO_FUNC_IRQ);
-    pm1.gpioSetMode(IRQ_GPIO, M5PM1_GPIO_MODE_INPUT);
-    pm1.gpioSetPull(IRQ_GPIO, M5PM1_GPIO_PULL_UP);
-
     // 设置ESP32的中断引脚，用于接收PM1的IRQ信号。
     // Setup ESP32 interrupt pin to receive IRQ signal from PM1.
     pinMode(PM1_ESP_IRQ_GPIO, INPUT_PULLUP);
     attachInterrupt(PM1_ESP_IRQ_GPIO, pm1_irq_handler, FALLING);
 
-    // 启用 PM1 GPIO1 的中断输出（这里的Mask Disable代表允许产生中断）。
-    // Enable PM1 GPIO1 IRQ output (Mask Disable means interrupt enabled).
-    pm1.irqSetGpioMask(IRQ_GPIO, M5PM1_IRQ_MASK_DISABLE);
-
-    // 启用按钮中断输出。
-    // Enable button IRQ output.
-    pm1.irqSetBtnMaskAll(M5PM1_IRQ_MASK_DISABLE);
+    // 屏蔽所有GPIO和按钮中断
+    // Mask all GPIO and Button IRQs (disable them)
     pm1.irqSetGpioMaskAll(M5PM1_IRQ_MASK_ENABLE);
-    pm1.irqSetSysMaskAll(M5PM1_IRQ_MASK_ENABLE);
+    pm1.irqSetBtnMaskAll(M5PM1_IRQ_MASK_ENABLE);
+
+    // 配置系统中断：只启用 VIN 移除中断（也可以全部开启）
+    // Configure System IRQs: Enable VIN remove interrupt
+    pm1.irqSetSysMaskAll(M5PM1_IRQ_MASK_ENABLE);                           // 先全部屏蔽
+    pm1.irqSetSysMask(M5PM1_IRQ_SYS_5VIN_REMOVE, M5PM1_IRQ_MASK_DISABLE);  // 开启5VIN移除
+    // pm1.irqSetSysMask(M5PM1_IRQ_SYS_5VIN_INSERT, M5PM1_IRQ_MASK_DISABLE); // 可选开启插入
+
+    // 注意：有些板子 TypeC 可能连接到 5VINOUT
+    pm1.irqSetSysMask(M5PM1_IRQ_SYS_5VINOUT_REMOVE, M5PM1_IRQ_MASK_DISABLE);
 
     printDivider();
+    LOGI("Waiting for USB unplug event...");
 }
 
 void loop()
@@ -147,30 +146,34 @@ void loop()
     if (irqFlag) {
         irqFlag = false;
 
-        uint8_t gpioIrq = 0;
-        if (pm1.irqGetGpioStatus(&gpioIrq, M5PM1_CLEAN_ONCE) == M5PM1_OK) {
-            if (gpioIrq != M5PM1_IRQ_GPIO_NONE) {
-                LOGI("GPIO IRQ status: 0x%02X", gpioIrq);
-                if (gpioIrq & M5PM1_IRQ_GPIO0) LOGI("- GPIO0 IRQ triggered");
-                if (gpioIrq & M5PM1_IRQ_GPIO1) LOGI("- GPIO1 IRQ triggered");
-                if (gpioIrq & M5PM1_IRQ_GPIO2) LOGI("- GPIO2 IRQ triggered");
-                if (gpioIrq & M5PM1_IRQ_GPIO3) LOGI("- GPIO3 IRQ triggered");
-                if (gpioIrq & M5PM1_IRQ_GPIO4) LOGI("- GPIO4 IRQ triggered");
+        uint8_t sysIrq = 0;
+        if (pm1.irqGetSysStatus(&sysIrq, M5PM1_CLEAN_ONCE) == M5PM1_OK) {
+            if (sysIrq != M5PM1_IRQ_SYS_NONE) {
+                LOGI("System IRQ status: 0x%02X", sysIrq);
+
+                // 检测 5VIN 移除
+                if (sysIrq & M5PM1_IRQ_SYS_5VIN_REMOVE) {
+                    LOGI("Event: 5VIN Removed");
+                    enterSleep();
+                }
+
+                // 检测 5VINOUT 移除 (以防万一)
+                if (sysIrq & M5PM1_IRQ_SYS_5VINOUT_REMOVE) {
+                    LOGI("Event: 5VINOUT Removed");
+                    enterSleep();
+                }
+
+                if (sysIrq & M5PM1_IRQ_SYS_5VIN_INSERT) {
+                    LOGI("Event: 5VIN Inserted");
+                }
             }
         }
 
-        uint8_t btnIrq = 0;
-        if (pm1.irqGetBtnStatus(&btnIrq, M5PM1_CLEAN_ONCE) == M5PM1_OK) {
-            if (btnIrq != M5PM1_IRQ_BTN_NONE) {
-                LOGI("Button IRQ status: 0x%02X", btnIrq);
-                if (btnIrq & M5PM1_IRQ_BTN_CLICK) LOGI("- Single Click triggered");
-                if (btnIrq & M5PM1_IRQ_BTN_DOUBLE) {
-                    LOGI("- Double Click triggered");
-                    enterSleep();
-                }
-                if (btnIrq & M5PM1_IRQ_BTN_WAKE) LOGI("- Wake Button triggered");
-            }
-        }
+        // 同时也清除任何可能的误触发（虽然我们mask了btn和gpio）
+        uint8_t dummy;
+        pm1.irqGetGpioStatus(&dummy, M5PM1_CLEAN_ALL);
+        pm1.irqGetBtnStatus(&dummy, M5PM1_CLEAN_ALL);
+
     } else if (digitalRead(PM1_ESP_IRQ_GPIO) == LOW) {
         // 存在未处理的中断信号，读取以清除（但忽略内容）
         // Unhandled IRQ signal exists, read to clear (but ignore content)
