@@ -12,7 +12,7 @@
  * @note PM1 是一款多功能电源管理IC，支持：
  *       PM1 is a multi-function power management IC supporting:
  *       - 电池充电和监控 / Battery charging and monitoring
- *       - 多路电源轨（DCDC 5V，LDO 3.3V） / Multiple power rails (DCDC 5V, LDO 3.3V)
+ *       - 多路电源轨（DCDC 5V，LDO 3.3V, BOOST 5V） / Multiple power rails (DCDC 5V, LDO 3.3V, BOOST 5V)
  *       - 5个GPIO引脚支持多种功能 / 5 GPIO pins with various functions
  *       - PWM输出、ADC输入 / PWM output, ADC input
  *       - NeoPixel LED控制 / NeoPixel LED control
@@ -588,14 +588,30 @@ typedef enum {
  * @brief 按钮延时配置 / Button delay/timeout configuration
  */
 typedef enum {
-    M5PM1_BTN_DELAY_125MS = 0,  // 125毫秒
-                                // 125 milliseconds
-    M5PM1_BTN_DELAY_250MS = 1,  // 250毫秒
-                                // 250 milliseconds
-    M5PM1_BTN_DELAY_500MS = 2,  // 500毫秒
-                                // 500 milliseconds
-    M5PM1_BTN_DELAY_1000MS = 3  // 1000毫秒
-                                // 1000 milliseconds
+    M5PM1_BTN_CLICK_DELAY_125MS = 0x00,          // 125毫秒
+                                                // 125 milliseconds
+    M5PM1_BTN_CLICK_DELAY_250MS = 0x01,          // 250毫秒
+                                                // 250 milliseconds
+    M5PM1_BTN_CLICK_DELAY_500MS = 0x02,          // 500毫秒
+                                                // 500 milliseconds
+    M5PM1_BTN_CLICK_DELAY_1000MS = 0x03,         // 1000毫秒
+                                                // 1000 milliseconds
+    M5PM1_BTN_DOUBLE_CLICK_DELAY_125MS = 0x00,   // 双击125毫秒
+                                                // Double click 125 milliseconds
+    M5PM1_BTN_DOUBLE_CLICK_DELAY_250MS = 0x01,   // 双击250毫秒
+                                                // Double click 250 milliseconds
+    M5PM1_BTN_DOUBLE_CLICK_DELAY_500MS = 0x02,   // 双击500毫秒
+                                                // Double click 500 milliseconds
+    M5PM1_BTN_DOUBLE_CLICK_DELAY_1000MS = 0x03,  // 双击1000毫秒
+                                                // Double click 1000 milliseconds
+    M5PM1_BTN_LONG_PRESS_DELAY_1000MS = 0x00,    // 长按1000毫秒
+                                                // Long press 1000 milliseconds
+    M5PM1_BTN_LONG_PRESS_DELAY_2000MS = 0x01,    // 长按2000毫秒
+                                                // Long press 2000 milliseconds
+    M5PM1_BTN_LONG_PRESS_DELAY_3000MS = 0x02,    // 长按3000毫秒
+                                                // Long press 3000 milliseconds
+    M5PM1_BTN_LONG_PRESS_DELAY_4000MS = 0x03     // 长按4000毫秒
+                                                // Long press 4000 milliseconds
 } m5pm1_btn_delay_t;
 
 /**
@@ -1886,10 +1902,14 @@ public:
      * @param type 按钮事件类型：M5PM1_BTN_TYPE_CLICK (单击) / M5PM1_BTN_TYPE_DOUBLE (双击) / M5PM1_BTN_TYPE_LONG (长按)
      *             Button event type: M5PM1_BTN_TYPE_CLICK (single click) / M5PM1_BTN_TYPE_DOUBLE (double click) /
      * M5PM1_BTN_TYPE_LONG (long press)
-     * @param delay 延时配置：M5PM1_BTN_DELAY_125MS / 250MS / 500MS / 1000MS
-     *              Delay configuration: M5PM1_BTN_DELAY_125MS / 250MS / 500MS / 1000MS
-     *              注意：长按类型的实际延时为 1s/2s/3s/4s（对应枚举值 0/1/2/3）
-     *              Note: For long press type, actual delays are 1s/2s/3s/4s (corresponding to enum values 0/1/2/3)
+    * @param delay 延时配置：
+    *              - 单击: M5PM1_BTN_CLICK_DELAY_125MS / 250MS / 500MS / 1000MS
+    *              - 双击: M5PM1_BTN_DOUBLE_CLICK_DELAY_125MS / 250MS / 500MS / 1000MS
+    *              - 长按: M5PM1_BTN_LONG_PRESS_DELAY_1000MS / 2000MS / 3000MS / 4000MS
+    *              Delay configuration:
+    *              - Click: M5PM1_BTN_CLICK_DELAY_125MS / 250MS / 500MS / 1000MS
+    *              - Double click: M5PM1_BTN_DOUBLE_CLICK_DELAY_125MS / 250MS / 500MS / 1000MS
+    *              - Long press: M5PM1_BTN_LONG_PRESS_DELAY_1000MS / 2000MS / 3000MS / 4000MS
      * @return 成功返回 M5PM1_OK，否则返回错误码
      *         Return M5PM1_OK on success, error code otherwise
      */

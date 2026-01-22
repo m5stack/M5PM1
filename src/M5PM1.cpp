@@ -2908,7 +2908,7 @@ m5pm1_err_t M5PM1::btnSetConfig(m5pm1_btn_type_t type, m5pm1_btn_delay_t delay)
     }
 
     // 验证延迟配置 (0-3) / Validate delay configuration
-    if (delay > M5PM1_BTN_DELAY_1000MS) {
+    if (delay > M5PM1_BTN_CLICK_DELAY_1000MS) {
         M5PM1_LOG_E(TAG, "Invalid delay value: %d (valid range: 0-3)", delay);
         return M5PM1_ERR_INVALID_ARG;
     }
