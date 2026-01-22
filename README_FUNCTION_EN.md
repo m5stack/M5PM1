@@ -16,7 +16,7 @@ Feature overview of the PM1 power management driver library for Arduino/ESP-IDF.
 
 - `examples/basic_power_adc/basic_power_adc.ino`: Initialization, device info, VBAT/VIN/5V readings, ADC/temperature sampling, power rail control.
 - `examples/gpio_pwm/gpio_pwm.ino`: GPIO output/input reads and PWM breathing LED demo.
-- `examples/interrupt_button_sleep/interrupt_button_sleep.ino`: GPIO interrupt, button APIs, timer/wake, and shutdown demo.
+- `examples/usb_interrupt_sleep/usb_interrupt_sleep.ino`: USB plug/unplug interrupt, timer wake, and shutdown demo.
 - `examples/neopixel/neopixel.ino`: NeoPixel rainbow demo.
 
 ## Feature Categories

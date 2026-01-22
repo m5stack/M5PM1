@@ -16,7 +16,7 @@
 
 - `examples/basic_power_adc/basic_power_adc.ino`: 初始化、设备信息、VBAT/VIN/5V 读数、ADC/温度采样、电源轨控制示例。
 - `examples/gpio_pwm/gpio_pwm.ino`: GPIO 输出/输入读取与 PWM 呼吸灯示例。
-- `examples/interrupt_button_sleep/interrupt_button_sleep.ino`: GPIO 中断、按钮 API、定时器/唤醒与关机示例。
+- `examples/usb_interrupt_sleep/usb_interrupt_sleep.ino`: USB 插拔中断、定时器唤醒与关机示例。
 - `examples/neopixel/neopixel.ino`: NeoPixel 彩虹渐变示例。
 
 ## 功能分类
