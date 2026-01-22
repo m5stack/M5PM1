@@ -75,7 +75,7 @@ Feature overview of the PM1 power management driver library for Arduino/ESP-IDF.
 - `getPowerSource`
 - `getWakeSource`/`clearWakeSource`
 - `setPowerConfig`/`getPowerConfig`/`clearPowerConfig`
-- `setChargeEnable`/`setDcdcEnable`/`setLdoEnable`/`set5VInOutEnable`/`setLedEnLevel`
+- `setChargeEnable`/`setDcdcEnable`/`setLdoEnable`/`setBoostEnable`/`setLedEnLevel`
 - `setBatteryLvp`
 
 ### 9) Watchdog and Timer

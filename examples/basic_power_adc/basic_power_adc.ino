@@ -101,7 +101,7 @@ static void demoPowerRails()
     LOGI("LDO -> ON");
     delay(300);
 
-    pm1.set5VInOutEnable(true);
+    pm1.setBoostEnable(true);
     LOGI("5V IN/OUT -> ON");
     delay(300);
 

@@ -75,7 +75,7 @@
 - `getPowerSource`
 - `getWakeSource`/`clearWakeSource`
 - `setPowerConfig`/`getPowerConfig`/`clearPowerConfig`
-- `setChargeEnable`/`setDcdcEnable`/`setLdoEnable`/`set5VInOutEnable`/`setLedEnLevel`
+- `setChargeEnable`/`setDcdcEnable`/`setLdoEnable`/`setBoostEnable`/`setLedEnLevel`
 - `setBatteryLvp`
 
 ### 9) 看门狗与定时器
