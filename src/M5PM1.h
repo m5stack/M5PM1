@@ -736,8 +736,8 @@ typedef enum {
 /**
  * @brief GPIO 中断标志位
  *        GPIO interrupt flag bits
- * @note 用于 irqGetGpioStatus(), irqClearGpio()
- *       Used for irqGetGpioStatus(), irqClearGpio()
+ * @note 用于 irqGetGpioStatus(), irqClearGpioAll()
+ *       Used for irqGetGpioStatus(), irqClearGpioAll()
  */
 typedef enum {
     M5PM1_IRQ_GPIO0 = (1 << 0),  // GPIO0 中断标志
@@ -782,8 +782,8 @@ typedef enum {
 /**
  * @brief 系统中断标志位
  *        System interrupt flag bits
- * @note 用于 irqGetSysStatus(), irqClearSys()
- *       Used for irqGetSysStatus(), irqClearSys()
+ * @note 用于 irqGetSysStatus(), irqClearSysAll()
+ *       Used for irqGetSysStatus(), irqClearSysAll()
  */
 typedef enum {
     M5PM1_IRQ_SYS_5VIN_INSERT = (1 << 0),     // 5VIN 插入
@@ -2015,14 +2015,12 @@ public:
     m5pm1_err_t irqGetGpioStatus(uint8_t* status, m5pm1_clean_type_t cleanType = M5PM1_CLEAN_NONE);
 
     /**
-     * @brief 清除 GPIO 中断状态
-     *        Clear GPIO interrupt status
-     * @param mask 要清除的中断位掩码
-     *             Interrupt bitmask to clear
+     * @brief 清除所有 GPIO 中断状态
+     *        Clear all GPIO interrupt status
      * @return 成功返回 M5PM1_OK，否则返回错误码
      *         Return M5PM1_OK on success, error code otherwise
      */
-    m5pm1_err_t irqClearGpio(uint8_t mask);
+    m5pm1_err_t irqClearGpioAll();
 
     /**
      * @brief 读取系统中断状态
@@ -2043,14 +2041,12 @@ public:
     m5pm1_err_t irqGetSysStatus(uint8_t* status, m5pm1_clean_type_t cleanType = M5PM1_CLEAN_NONE);
 
     /**
-     * @brief 清除系统中断状态
-     *        Clear system interrupt status
-     * @param mask 要清除的中断位掩码
-     *             Interrupt bitmask to clear
+     * @brief 清除所有系统中断状态
+     *        Clear all system interrupt status
      * @return 成功返回 M5PM1_OK，否则返回错误码
      *         Return M5PM1_OK on success, error code otherwise
      */
-    m5pm1_err_t irqClearSys(uint8_t mask);
+    m5pm1_err_t irqClearSysAll();
 
     /**
      * @brief 读取按钮中断状态
@@ -2071,14 +2067,12 @@ public:
     m5pm1_err_t irqGetBtnStatus(uint8_t* status, m5pm1_clean_type_t cleanType = M5PM1_CLEAN_NONE);
 
     /**
-     * @brief 清除按钮中断状态
-     *        Clear button interrupt status
-     * @param mask 要清除的中断位掩码
-     *             Interrupt bitmask to clear
+     * @brief 清除所有按钮中断状态
+     *        Clear all button interrupt status
      * @return 成功返回 M5PM1_OK，否则返回错误码
      *         Return M5PM1_OK on success, error code otherwise
      */
-    m5pm1_err_t irqClearBtn(uint8_t mask);
+    m5pm1_err_t irqClearBtnAll();
 
     // ========================
     // 中断状态读取（枚举返回，用户友好）

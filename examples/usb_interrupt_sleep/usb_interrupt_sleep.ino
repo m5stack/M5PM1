@@ -177,19 +177,17 @@ void loop()
             }
         }
 
-        // 同时也清除任何可能的误触发
-        // Also clear any possible spurious triggers
-        uint8_t dummy;
-        pm1.irqGetGpioStatus(&dummy, M5PM1_CLEAN_ALL);
-        pm1.irqGetBtnStatus(&dummy, M5PM1_CLEAN_ALL);
+        // 清除所有可能的误触发
+        // Clear all possible spurious triggers
+        pm1.irqClearGpioAll();
+        pm1.irqClearBtnAll();
 
     } else if (digitalRead(PM1_ESP_IRQ_GPIO) == LOW) {
-        // 存在未处理的中断信号，读取以清除（但忽略内容）
-        // Unhandled IRQ signal exists, read to clear (but ignore content)
-        uint8_t dummy;
-        pm1.irqGetGpioStatus(&dummy, M5PM1_CLEAN_ALL);
-        pm1.irqGetBtnStatus(&dummy, M5PM1_CLEAN_ALL);
-        pm1.irqGetSysStatus(&dummy, M5PM1_CLEAN_ALL);
+        // 处理未处理的中断信号
+        // Handle unhandled IRQ signal
+        pm1.irqClearBtnAll();
+        pm1.irqClearGpioAll();
+        pm1.irqClearSysAll();
     }
 
     delay(500);

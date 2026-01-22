@@ -92,9 +92,9 @@ Feature overview of the PM1 power management driver library for Arduino/ESP-IDF.
 ### 11) Interrupts
 
 - **Status read and clear**
-  - `irqGetGpioStatus`/`irqClearGpio`
-  - `irqGetSysStatus`/`irqClearSys`
-  - `irqGetBtnStatus`/`irqClearBtn`
+  - `irqGetGpioStatus`/`irqClearGpioAll`
+  - `irqGetSysStatus`/`irqClearSysAll`
+  - `irqGetBtnStatus`/`irqClearBtnAll`
 - **Enum-style read**
   - `irqGetGpioStatusEnum`/`irqGetSysStatusEnum`/`irqGetBtnStatusEnum`
 - **Interrupt masks**

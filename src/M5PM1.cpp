@@ -3076,21 +3076,16 @@ m5pm1_err_t M5PM1::irqGetGpioStatus(uint8_t* status, m5pm1_clean_type_t cleanTyp
     return M5PM1_OK;
 }
 
-m5pm1_err_t M5PM1::irqClearGpio(uint8_t mask)
+m5pm1_err_t M5PM1::irqClearGpioAll()
 {
     if (!_initialized) {
         M5PM1_LOG_E(TAG, "Not initialized");
         return M5PM1_ERR_NOT_INIT;
     }
 
-    // PM1芯片采用"写0清除"机制：读取当前值，清除mask中为1的位，写回
-    // PM1 chip uses "write-0-to-clear" mechanism: read, clear bits in mask, write back
-    uint8_t irq_status;
-    if (!_readReg(M5PM1_REG_IRQ_STATUS1, &irq_status)) {
-        return M5PM1_ERR_I2C_COMM;
-    }
-    uint8_t new_val = irq_status & ~mask;
-    if (!_writeReg(M5PM1_REG_IRQ_STATUS1, new_val)) {
+    // PM1芯片采用"写0清除"机制：写入0x00清除所有位
+    // PM1 chip uses "write-0-to-clear" mechanism: write 0x00 to clear all bits
+    if (!_writeReg(M5PM1_REG_IRQ_STATUS1, 0x00)) {
         return M5PM1_ERR_I2C_COMM;
     }
 
@@ -3125,21 +3120,16 @@ m5pm1_err_t M5PM1::irqGetSysStatus(uint8_t* status, m5pm1_clean_type_t cleanType
     return M5PM1_OK;
 }
 
-m5pm1_err_t M5PM1::irqClearSys(uint8_t mask)
+m5pm1_err_t M5PM1::irqClearSysAll()
 {
     if (!_initialized) {
         M5PM1_LOG_E(TAG, "Not initialized");
         return M5PM1_ERR_NOT_INIT;
     }
 
-    // PM1芯片采用"写0清除"机制：读取当前值，清除mask中为1的位，写回
-    // PM1 chip uses "write-0-to-clear" mechanism: read, clear bits in mask, write back
-    uint8_t irq_status;
-    if (!_readReg(M5PM1_REG_IRQ_STATUS2, &irq_status)) {
-        return M5PM1_ERR_I2C_COMM;
-    }
-    uint8_t new_val = irq_status & ~mask;
-    if (!_writeReg(M5PM1_REG_IRQ_STATUS2, new_val)) {
+    // PM1芯片采用"写0清除"机制：写入0x00清除所有位
+    // PM1 chip uses "write-0-to-clear" mechanism: write 0x00 to clear all bits
+    if (!_writeReg(M5PM1_REG_IRQ_STATUS2, 0x00)) {
         return M5PM1_ERR_I2C_COMM;
     }
 
@@ -3174,21 +3164,16 @@ m5pm1_err_t M5PM1::irqGetBtnStatus(uint8_t* status, m5pm1_clean_type_t cleanType
     return M5PM1_OK;
 }
 
-m5pm1_err_t M5PM1::irqClearBtn(uint8_t mask)
+m5pm1_err_t M5PM1::irqClearBtnAll()
 {
     if (!_initialized) {
         M5PM1_LOG_E(TAG, "Not initialized");
         return M5PM1_ERR_NOT_INIT;
     }
 
-    // PM1芯片采用"写0清除"机制：读取当前值，清除mask中为1的位，写回
-    // PM1 chip uses "write-0-to-clear" mechanism: read, clear bits in mask, write back
-    uint8_t irq_status;
-    if (!_readReg(M5PM1_REG_IRQ_STATUS3, &irq_status)) {
-        return M5PM1_ERR_I2C_COMM;
-    }
-    uint8_t new_val = irq_status & ~mask;
-    if (!_writeReg(M5PM1_REG_IRQ_STATUS3, new_val)) {
+    // PM1芯片采用"写0清除"机制：写入0x00清除所有位
+    // PM1 chip uses "write-0-to-clear" mechanism: write 0x00 to clear all bits
+    if (!_writeReg(M5PM1_REG_IRQ_STATUS3, 0x00)) {
         return M5PM1_ERR_I2C_COMM;
     }
 
@@ -3650,7 +3635,7 @@ m5pm1_err_t M5PM1::sysCmd(m5pm1_sys_cmd_t cmd)
         M5PM1_LOG_E(TAG, "Not initialized");
         return M5PM1_ERR_NOT_INIT;
     }
-    M5PM1_DELAY_MS(100);
+    M5PM1_DELAY_MS(120);
     uint8_t val = M5PM1_SYS_CMD_KEY | (uint8_t)cmd;
     if (!_writeReg(M5PM1_REG_SYS_CMD, val)) {
         return M5PM1_ERR_I2C_COMM;

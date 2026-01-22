@@ -92,9 +92,9 @@
 ### 11) 中断
 
 - **状态读取与清除**
-  - `irqGetGpioStatus`/`irqClearGpio`
-  - `irqGetSysStatus`/`irqClearSys`
-  - `irqGetBtnStatus`/`irqClearBtn`
+  - `irqGetGpioStatus`/`irqClearGpioAll`
+  - `irqGetSysStatus`/`irqClearSysAll`
+  - `irqGetBtnStatus`/`irqClearBtnAll`
 - **枚举式读取**
   - `irqGetGpioStatusEnum`/`irqGetSysStatusEnum`/`irqGetBtnStatusEnum`
 - **中断屏蔽**
