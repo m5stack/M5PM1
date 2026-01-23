@@ -1,4 +1,5 @@
 description: "M5Stack M5PM1 Power Management IC Library"
+url: "https://github.com/m5stack/M5PM1"
 maintainers:
   - "M5Stack"
 license: MIT
@@ -11,4 +12,4 @@ dependencies:
   espressif/i2c_bus:
     version: "^1.0.0"
     public: true
-version: "1.0.1"
+version: "1.0.2"

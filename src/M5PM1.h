@@ -312,13 +312,13 @@ typedef enum {
                                   //           BTN_STATE - current button state: 0=release, 1=pressed
 #define M5PM1_REG_BTN_CFG_1 0x49  // R/W   按钮配置 / Button configuration
 //       [7] DL_LOCK - 下载模式锁定: 0=正常 1=锁定（禁止进入下载模式）
-//           DL_LOCK - download mode lock: 0=normal, 1=locked (disable download mode) 
+//           DL_LOCK - download mode lock: 0=normal, 1=locked (disable download mode)
 //       [6:5] DBL_DLY - 双击间隔: 00=125ms 01=250ms 10=500ms 11=1s
-//             DBL_DLY - double-click gap: 00=125ms, 01=250ms, 10=500ms, 11=1s 
+//             DBL_DLY - double-click gap: 00=125ms, 01=250ms, 10=500ms, 11=1s
 //       [4:3] LONG_DLY - 长按延时: 00=1s 01=2s 10=3s 11=4s
-//             LONG_DLY - long-press delay: 00=1s, 01=2s, 10=3s, 11=4s 
+//             LONG_DLY - long-press delay: 00=1s, 01=2s, 10=3s, 11=4s
 //       [2:1] CLK_DLY - 单击延时: 00=125ms 01=250ms 10=500ms 11=1s
-//             CLK_DLY - click delay: 00=125ms, 01=250ms, 10=500ms, 11=1s 
+//             CLK_DLY - click delay: 00=125ms, 01=250ms, 10=500ms, 11=1s
 //       [0] SINGLE_RST_DIS - 单击复位禁用: 0=使能 1=禁用
 //           SINGLE_RST_DIS - single-click reset disable: 0=enable, 1=disable
 #define M5PM1_REG_BTN_CFG_2 \
@@ -589,29 +589,29 @@ typedef enum {
  */
 typedef enum {
     M5PM1_BTN_CLICK_DELAY_125MS = 0x00,          // 125毫秒
-                                                // 125 milliseconds
+                                                 // 125 milliseconds
     M5PM1_BTN_CLICK_DELAY_250MS = 0x01,          // 250毫秒
-                                                // 250 milliseconds
+                                                 // 250 milliseconds
     M5PM1_BTN_CLICK_DELAY_500MS = 0x02,          // 500毫秒
-                                                // 500 milliseconds
+                                                 // 500 milliseconds
     M5PM1_BTN_CLICK_DELAY_1000MS = 0x03,         // 1000毫秒
-                                                // 1000 milliseconds
+                                                 // 1000 milliseconds
     M5PM1_BTN_DOUBLE_CLICK_DELAY_125MS = 0x00,   // 双击125毫秒
-                                                // Double click 125 milliseconds
+                                                 // Double click 125 milliseconds
     M5PM1_BTN_DOUBLE_CLICK_DELAY_250MS = 0x01,   // 双击250毫秒
-                                                // Double click 250 milliseconds
+                                                 // Double click 250 milliseconds
     M5PM1_BTN_DOUBLE_CLICK_DELAY_500MS = 0x02,   // 双击500毫秒
-                                                // Double click 500 milliseconds
+                                                 // Double click 500 milliseconds
     M5PM1_BTN_DOUBLE_CLICK_DELAY_1000MS = 0x03,  // 双击1000毫秒
-                                                // Double click 1000 milliseconds
+                                                 // Double click 1000 milliseconds
     M5PM1_BTN_LONG_PRESS_DELAY_1000MS = 0x00,    // 长按1000毫秒
-                                                // Long press 1000 milliseconds
+                                                 // Long press 1000 milliseconds
     M5PM1_BTN_LONG_PRESS_DELAY_2000MS = 0x01,    // 长按2000毫秒
-                                                // Long press 2000 milliseconds
+                                                 // Long press 2000 milliseconds
     M5PM1_BTN_LONG_PRESS_DELAY_3000MS = 0x02,    // 长按3000毫秒
-                                                // Long press 3000 milliseconds
+                                                 // Long press 3000 milliseconds
     M5PM1_BTN_LONG_PRESS_DELAY_4000MS = 0x03     // 长按4000毫秒
-                                                // Long press 4000 milliseconds
+                                                 // Long press 4000 milliseconds
 } m5pm1_btn_delay_t;
 
 /**
@@ -1902,14 +1902,14 @@ public:
      * @param type 按钮事件类型：M5PM1_BTN_TYPE_CLICK (单击) / M5PM1_BTN_TYPE_DOUBLE (双击) / M5PM1_BTN_TYPE_LONG (长按)
      *             Button event type: M5PM1_BTN_TYPE_CLICK (single click) / M5PM1_BTN_TYPE_DOUBLE (double click) /
      * M5PM1_BTN_TYPE_LONG (long press)
-    * @param delay 延时配置：
-    *              - 单击: M5PM1_BTN_CLICK_DELAY_125MS / 250MS / 500MS / 1000MS
-    *              - 双击: M5PM1_BTN_DOUBLE_CLICK_DELAY_125MS / 250MS / 500MS / 1000MS
-    *              - 长按: M5PM1_BTN_LONG_PRESS_DELAY_1000MS / 2000MS / 3000MS / 4000MS
-    *              Delay configuration:
-    *              - Click: M5PM1_BTN_CLICK_DELAY_125MS / 250MS / 500MS / 1000MS
-    *              - Double click: M5PM1_BTN_DOUBLE_CLICK_DELAY_125MS / 250MS / 500MS / 1000MS
-    *              - Long press: M5PM1_BTN_LONG_PRESS_DELAY_1000MS / 2000MS / 3000MS / 4000MS
+     * @param delay 延时配置：
+     *              - 单击: M5PM1_BTN_CLICK_DELAY_125MS / 250MS / 500MS / 1000MS
+     *              - 双击: M5PM1_BTN_DOUBLE_CLICK_DELAY_125MS / 250MS / 500MS / 1000MS
+     *              - 长按: M5PM1_BTN_LONG_PRESS_DELAY_1000MS / 2000MS / 3000MS / 4000MS
+     *              Delay configuration:
+     *              - Click: M5PM1_BTN_CLICK_DELAY_125MS / 250MS / 500MS / 1000MS
+     *              - Double click: M5PM1_BTN_DOUBLE_CLICK_DELAY_125MS / 250MS / 500MS / 1000MS
+     *              - Long press: M5PM1_BTN_LONG_PRESS_DELAY_1000MS / 2000MS / 3000MS / 4000MS
      * @return 成功返回 M5PM1_OK，否则返回错误码
      *         Return M5PM1_OK on success, error code otherwise
      */
