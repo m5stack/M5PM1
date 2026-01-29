@@ -12,4 +12,4 @@ dependencies:
   espressif/i2c_bus:
     version: "^1.0.0"
     public: true
-version: "1.0.3"
+version: "1.0.4"
