@@ -162,12 +162,11 @@ M5PM1::M5PM1()
     _i2cDriverType  = M5PM1_I2C_DRIVER_NONE;
     _i2c_master_bus = nullptr;
     _i2c_master_dev = nullptr;
-    _i2c_bus        = nullptr;
-    _i2c_device     = nullptr;
-    _busExternal    = false;
-    _sda            = -1;
-    _scl            = -1;
-    _port           = I2C_NUM_0;
+    // NOTE: _i2c_bus and _i2c_device removed (i2c_bus support removed)
+    _busExternal = false;
+    _sda         = -1;
+    _scl         = -1;
+    _port        = I2C_NUM_0;
 #endif
 }
 
@@ -194,12 +193,7 @@ M5PM1::~M5PM1()
             }
             break;
 
-        case M5PM1_I2C_DRIVER_BUS:
-            if (_i2c_device) {
-                i2c_bus_device_delete(&_i2c_device);
-                _i2c_device = nullptr;
-            }
-            break;
+            // NOTE: M5PM1_I2C_DRIVER_BUS case removed (i2c_bus support removed)
 
         default:
             break;
@@ -582,109 +576,8 @@ m5pm1_err_t M5PM1::begin(i2c_master_bus_handle_t bus, uint8_t addr, uint32_t spe
     return M5PM1_OK;
 }
 
-m5pm1_err_t M5PM1::begin(i2c_bus_handle_t bus, uint8_t addr, uint32_t speed)
-{
-    _addr          = addr;
-    _busExternal   = true;
-    _i2cDriverType = M5PM1_I2C_DRIVER_BUS;
-    _i2c_bus       = bus;
-
-    // 步骤1：校验用户频率并记录
-    // Step 1: Validate requested speed and store it
-    if (!_isValidI2cFrequency(speed)) {
-        M5PM1_LOG_W(TAG, "Invalid I2C frequency: %lu Hz. PM1 only supports 100KHz or 400KHz. Falling back to 100KHz.",
-                    (unsigned long)speed);
-        _requestedSpeed = M5PM1_I2C_FREQ_100K;
-    } else {
-        _requestedSpeed = speed;
-    }
-
-    // 步骤2：以100KHz创建设备句柄
-    // Step 2: Create device handle at 100KHz
-    _i2c_device = i2c_bus_device_create(bus, addr, M5PM1_I2C_FREQ_100K);
-    if (_i2c_device == nullptr) {
-        M5PM1_LOG_E(TAG, "Failed to create I2C device");
-        return M5PM1_ERR_I2C_CONFIG;
-    }
-
-    // 尝试唤醒设备
-    // Try to wake up the device
-    M5PM1_I2C_SEND_WAKE(_i2c_device, M5PM1_REG_HW_REV);
-    M5PM1_DELAY_MS(10);
-
-    // 步骤3：验证设备通信（失败则等待800ms重试一次）
-    // Step 3: Verify device communication (retry once after 800ms if failed)
-    if (!_initDevice()) {
-        M5PM1_LOG_W(TAG, "Device init failed, retrying after 800ms...");
-        M5PM1_DELAY_MS(800);
-        // 重试前再次发送唤醒信号
-        // Send wake signal again before retry
-        M5PM1_I2C_SEND_WAKE(_i2c_device, M5PM1_REG_HW_REV);
-        M5PM1_DELAY_MS(10);
-        if (!_initDevice()) {
-            // 100K 再次失败，尝试 400K
-            // 100K failed again, try 400K
-            M5PM1_LOG_W(TAG, "Device init failed at 100KHz (retry), trying 400KHz...");
-
-            // 删除当前100K设备句柄
-            // Remove current 100K device handle
-            i2c_bus_device_delete(&_i2c_device);
-            _i2c_device = nullptr;
-
-            // 以400K重新创建设备句柄
-            // Recreate device handle at 400K
-            _i2c_device = i2c_bus_device_create(bus, addr, M5PM1_I2C_FREQ_400K);
-            if (_i2c_device == nullptr) {
-                M5PM1_LOG_E(TAG, "Failed to create I2C device at 400KHz");
-                return M5PM1_ERR_I2C_CONFIG;
-            }
-
-            // 尝试唤醒设备
-            // Try to wake up the device
-            M5PM1_I2C_SEND_WAKE(_i2c_device, M5PM1_REG_HW_REV);
-            M5PM1_DELAY_MS(10);
-
-            if (!_initDevice()) {
-                M5PM1_LOG_E(TAG, "Failed at 100KHz (twice) and 400KHz");
-                i2c_bus_device_delete(&_i2c_device);
-                _i2c_device = nullptr;
-                return M5PM1_ERR_I2C_COMM;
-            }
-        }
-    }
-    _initialized = true;
-
-    // 步骤4：配置设备I2C参数（关闭睡眠 + 目标频率）
-    // Step 4: Configure device I2C (sleep off + target speed)
-    m5pm1_i2c_speed_t targetSpeed =
-        (_requestedSpeed == M5PM1_I2C_FREQ_400K) ? M5PM1_I2C_SPEED_400K : M5PM1_I2C_SPEED_100K;
-    if (setI2cConfig(0, targetSpeed) != M5PM1_OK) {
-        M5PM1_LOG_W(TAG, "Failed to set I2C config");
-    }
-
-    // 步骤5：重建设备句柄到目标频率
-    // Step 5: Recreate device handle at target speed
-    i2c_bus_device_delete(&_i2c_device);
-    _i2c_device = nullptr;
-
-    _i2c_device = i2c_bus_device_create(bus, addr, _requestedSpeed);
-    if (_i2c_device == nullptr) {
-        M5PM1_LOG_E(TAG, "Failed to switch device to %lu Hz", (unsigned long)_requestedSpeed);
-        _initialized = false;
-        return M5PM1_ERR_I2C_CONFIG;
-    }
-
-    // 步骤6：刷新快照并完成初始化
-    // Step 6: Refresh snapshot and finish initialization
-    _lastCommTime = M5PM1_GET_TIME_MS();
-    if (!_snapshotAll()) {
-        _clearAll();
-    }
-
-    _initialized = true;
-    M5PM1_LOG_I(TAG, "M5PM1 initialized at address 0x%02X (I2C: %lu Hz)", _addr, (unsigned long)_requestedSpeed);
-    return M5PM1_OK;
-}
+// NOTE: begin(i2c_bus_handle_t) implementation removed to avoid conflict with M5GFX's i2c_master driver
+// Use begin(i2c_master_bus_handle_t) instead
 
 #endif  // ARDUINO
 
@@ -854,9 +747,9 @@ bool M5PM1::_snapshotAw8737a()
 
     // 解析寄存器值（不含 REFRESH 位）
     // Parse register value (without REFRESH bit)
-    _aw8737aRegValue = regValue & 0x7F;
-    _aw8737aPin      = (m5pm1_gpio_num_t)(regValue & 0x1F);
-    _aw8737aPulseNum = (m5pm1_aw8737a_pulse_t)((regValue >> 5) & 0x03);
+    _aw8737aRegValue   = regValue & 0x7F;
+    _aw8737aPin        = (m5pm1_gpio_num_t)(regValue & 0x1F);
+    _aw8737aPulseNum   = (m5pm1_aw8737a_pulse_t)((regValue >> 5) & 0x03);
     _aw8737aStateValid = true;
 
     return true;
@@ -1244,9 +1137,6 @@ bool M5PM1::_writeReg(uint8_t reg, uint8_t value)
             case M5PM1_I2C_DRIVER_MASTER:
                 success = M5PM1_I2C_MASTER_WRITE_BYTE(_i2c_master_dev, reg, value) == ESP_OK;
                 break;
-            case M5PM1_I2C_DRIVER_BUS:
-                success = M5PM1_I2C_WRITE_BYTE(_i2c_device, reg, value) == ESP_OK;
-                break;
             default:
                 success = false;
                 break;
@@ -1275,9 +1165,6 @@ bool M5PM1::_writeReg16(uint8_t reg, uint16_t value)
             case M5PM1_I2C_DRIVER_SELF_CREATED:
             case M5PM1_I2C_DRIVER_MASTER:
                 success = M5PM1_I2C_MASTER_WRITE_REG16(_i2c_master_dev, reg, value) == ESP_OK;
-                break;
-            case M5PM1_I2C_DRIVER_BUS:
-                success = M5PM1_I2C_WRITE_REG16(_i2c_device, reg, value) == ESP_OK;
                 break;
             default:
                 success = false;
@@ -1308,9 +1195,6 @@ bool M5PM1::_readReg(uint8_t reg, uint8_t* value)
             case M5PM1_I2C_DRIVER_MASTER:
                 success = M5PM1_I2C_MASTER_READ_BYTE(_i2c_master_dev, reg, value) == ESP_OK;
                 break;
-            case M5PM1_I2C_DRIVER_BUS:
-                success = M5PM1_I2C_READ_BYTE(_i2c_device, reg, value) == ESP_OK;
-                break;
             default:
                 success = false;
                 break;
@@ -1339,9 +1223,6 @@ bool M5PM1::_readReg16(uint8_t reg, uint16_t* value)
             case M5PM1_I2C_DRIVER_SELF_CREATED:
             case M5PM1_I2C_DRIVER_MASTER:
                 success = M5PM1_I2C_MASTER_READ_REG16(_i2c_master_dev, reg, value) == ESP_OK;
-                break;
-            case M5PM1_I2C_DRIVER_BUS:
-                success = M5PM1_I2C_READ_REG16(_i2c_device, reg, value) == ESP_OK;
                 break;
             default:
                 success = false;
@@ -1372,9 +1253,6 @@ bool M5PM1::_writeBytes(uint8_t reg, const uint8_t* data, uint8_t len)
             case M5PM1_I2C_DRIVER_MASTER:
                 success = M5PM1_I2C_MASTER_WRITE_BYTES(_i2c_master_dev, reg, len, data) == ESP_OK;
                 break;
-            case M5PM1_I2C_DRIVER_BUS:
-                success = M5PM1_I2C_WRITE_BYTES(_i2c_device, reg, len, data) == ESP_OK;
-                break;
             default:
                 success = false;
                 break;
@@ -1403,9 +1281,6 @@ bool M5PM1::_readBytes(uint8_t reg, uint8_t* data, uint8_t len)
             case M5PM1_I2C_DRIVER_SELF_CREATED:
             case M5PM1_I2C_DRIVER_MASTER:
                 success = M5PM1_I2C_MASTER_READ_BYTES(_i2c_master_dev, reg, len, data) == ESP_OK;
-                break;
-            case M5PM1_I2C_DRIVER_BUS:
-                success = M5PM1_I2C_READ_BYTES(_i2c_device, reg, len, data) == ESP_OK;
                 break;
             default:
                 success = false;
@@ -4060,8 +3935,8 @@ m5pm1_err_t M5PM1::refreshAw8737aPulse()
     // 输出详细日志
     // Output detailed log
     const char* driveStr = (_pinStatus[_aw8737aPin].drive == M5PM1_GPIO_DRIVE_PUSHPULL) ? "PUSH-PULL" : "OPEN-DRAIN";
-    M5PM1_LOG_I(TAG, "AW8737A pulse refresh: pin=%d, pulseNum=%d, mode=OUTPUT, drive=%s",
-                _aw8737aPin, _aw8737aPulseNum, driveStr);
+    M5PM1_LOG_I(TAG, "AW8737A pulse refresh: pin=%d, pulseNum=%d, mode=OUTPUT, drive=%s", _aw8737aPin, _aw8737aPulseNum,
+                driveStr);
 
     M5PM1_DELAY_MS(20);
     _autoSnapshotUpdate(M5PM1_SNAPSHOT_DOMAIN_AW8737A);
@@ -4387,22 +4262,7 @@ m5pm1_err_t M5PM1::switchI2cSpeed(m5pm1_i2c_speed_t speed)
             }
             break;
         }
-        case M5PM1_I2C_DRIVER_BUS:
-            if (_i2c_device != nullptr) {
-                ret = i2c_bus_device_delete(&_i2c_device);
-                if (ret != ESP_OK) {
-                    M5PM1_LOG_E(TAG, "Failed to delete I2C device: %s", esp_err_to_name(ret));
-                    return M5PM1_ERR_I2C_CONFIG;
-                }
-                _i2c_device = i2c_bus_device_create(_i2c_bus, _addr, targetFreq);
-                if (_i2c_device == nullptr) {
-                    M5PM1_LOG_E(TAG, "Failed to create I2C device at %lu Hz", (unsigned long)targetFreq);
-                    _i2c_device = i2c_bus_device_create(_i2c_bus, _addr, originalFreq);
-                    _writeReg(M5PM1_REG_I2C_CFG, originalCfg);
-                    return M5PM1_ERR_I2C_CONFIG;
-                }
-            }
-            break;
+        // NOTE: M5PM1_I2C_DRIVER_BUS case removed (i2c_bus support removed)
         default:
             M5PM1_LOG_E(TAG, "Unknown I2C driver type");
             return M5PM1_ERR_INTERNAL;
@@ -4435,12 +4295,7 @@ m5pm1_err_t M5PM1::switchI2cSpeed(m5pm1_i2c_speed_t speed)
                 }
                 break;
             }
-            case M5PM1_I2C_DRIVER_BUS:
-                if (_i2c_device != nullptr) {
-                    i2c_bus_device_delete(&_i2c_device);
-                    _i2c_device = i2c_bus_device_create(_i2c_bus, _addr, originalFreq);
-                }
-                break;
+            // NOTE: M5PM1_I2C_DRIVER_BUS case removed
             default:
                 break;
         }
@@ -4487,8 +4342,7 @@ m5pm1_err_t M5PM1::sendWakeSignal()
         case M5PM1_I2C_DRIVER_SELF_CREATED:
         case M5PM1_I2C_DRIVER_MASTER:
             return M5PM1_I2C_MASTER_SEND_WAKE(_i2c_master_bus, _addr) == ESP_OK ? M5PM1_OK : M5PM1_ERR_I2C_COMM;
-        case M5PM1_I2C_DRIVER_BUS:
-            return M5PM1_I2C_SEND_WAKE(_i2c_device, M5PM1_REG_HW_REV) == ESP_OK ? M5PM1_OK : M5PM1_ERR_I2C_COMM;
+        // NOTE: M5PM1_I2C_DRIVER_BUS case removed (i2c_bus support removed)
         default:
             return M5PM1_ERR_INTERNAL;
     }
@@ -4524,7 +4378,7 @@ m5pm1_err_t M5PM1::updateSnapshot()
 m5pm1_snapshot_verify_t M5PM1::verifySnapshot()
 {
     m5pm1_snapshot_verify_t result = {0};
-    result.consistent = true;
+    result.consistent              = true;
 
     if (!_initialized) {
         result.consistent = false;

@@ -1,0 +1,48 @@
+fix: 移除 espressif/i2c_bus 依赖，解决与 M5GFX i2c_master 驱动冲突
+
+## 问题背景
+- M5PM1 原本依赖 espressif/i2c_bus 库（旧版 I2C 驱动）
+- M5GFX/M5Unified 使用 ESP-IDF native driver/i2c_master.h（新版驱动）
+- ESP-IDF 5.x 不允许同一个 I2C port 同时使用两种驱动
+- 导致 M5StickS3 屏幕黑屏或 I2C 通信失败
+
+## 解决方案
+### idf_component.yml
+- 删除 espressif/i2c_bus 依赖
+
+### M5PM1_i2c_compat.h
+- 移除 #include "i2c_bus.h"
+- 移除所有 M5PM1_I2C_*() i2c_bus 版本的宏
+- 保留 M5PM1_I2C_MASTER_*() i2c_master 版本的宏
+- 移除 M5PM1_I2C_DRIVER_BUS 枚举值
+
+### M5PM1.h
+- 删除 begin(i2c_bus_handle_t bus, ...) 函数声明
+- 删除 _i2c_bus 成员变量 (i2c_bus_handle_t)
+- 删除 _i2c_device 成员变量 (i2c_bus_device_handle_t)
+
+### M5PM1.cpp
+- 删除 begin(i2c_bus_handle_t) 实现（约100行）
+- 删除构造函数中的 _i2c_bus = nullptr / _i2c_device = nullptr
+- 删除析构函数中的 M5PM1_I2C_DRIVER_BUS case
+- 删除 _writeReg() 中的 M5PM1_I2C_DRIVER_BUS case
+- 删除 _writeReg16() 中的 M5PM1_I2C_DRIVER_BUS case
+- 删除 _readReg() 中的 M5PM1_I2C_DRIVER_BUS case
+- 删除 _readReg16() 中的 M5PM1_I2C_DRIVER_BUS case
+- 删除 _writeBytes() 中的 M5PM1_I2C_DRIVER_BUS case
+- 删除 _readBytes() 中的 M5PM1_I2C_DRIVER_BUS case
+- 删除 setI2cConfig() 中的两处 M5PM1_I2C_DRIVER_BUS case
+- 删除 sendWakeSignal() 中的 M5PM1_I2C_DRIVER_BUS case
+
+## API 变更
+- 旧 API: pm1.begin(i2c_bus_handle_t) [已删除]
+- 新 API: pm1.begin(i2c_master_bus_handle_t) [保留]
+- Arduino API: pm1.begin(TwoWire*) [保留，不受影响]
+
+## 兼容性
+- ESP-IDF 5.x: 完全支持（使用 i2c_master 驱动）
+- Arduino: 完全支持（使用 TwoWire）
+- 与 M5Unified/M5GFX: 现在可以共存，无驱动冲突
+
+## 测试状态
+待验证：M5StickS3 + M5PM1 + M5Unified 共存
