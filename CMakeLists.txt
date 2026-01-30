@@ -5,5 +5,5 @@ idf_component_register(
         "src"
     REQUIRES
         "driver"
-        "espressif__i2c_bus"
+    # NOTE: espressif__i2c_bus dependency removed to avoid conflict with M5GFX
 )
