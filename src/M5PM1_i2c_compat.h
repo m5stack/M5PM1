@@ -2,6 +2,8 @@
  * SPDX-FileCopyrightText: 2026 M5Stack Technology CO LTD
  *
  * SPDX-License-Identifier: MIT
+ *
+ * Modified by LOVECHEN: Removed i2c_bus dependency, only use ESP-IDF native i2c_master driver
  */
 
 #ifndef __M5PM1_I2C_COMPAT_H__
@@ -124,8 +126,7 @@ static inline void M5PM1_I2C_SEND_WAKE(TwoWire *wire, uint8_t addr)
 #else  // ESP-IDF
 
 #include <esp_err.h>
-#include <driver/i2c_master.h>  // ESP-IDF native i2c_master driver
-#include <i2c_bus.h>            // esp-idf-lib i2c_bus component
+#include <driver/i2c_master.h>  // ESP-IDF native i2c_master driver ONLY
 
 #ifdef __cplusplus
 extern "C" {
@@ -134,73 +135,14 @@ extern "C" {
 // ============================
 // I2C 驱动类型选择
 // I2C Driver Type Selection
+// NOTE: i2c_bus support removed to avoid driver conflict with M5GFX
 // ============================
 typedef enum {
     M5PM1_I2C_DRIVER_NONE = 0,      // 未初始化 / Not initialized
     M5PM1_I2C_DRIVER_SELF_CREATED,  // 使用 i2c_port_t 自创建 / Self-created using i2c_port_t
-    M5PM1_I2C_DRIVER_MASTER,        // ESP-IDF 原生 i2c_master 驱动 / ESP-IDF native i2c_master driver
-    M5PM1_I2C_DRIVER_BUS            // esp-idf-lib i2c_bus 组件 / esp-idf-lib i2c_bus component
+    M5PM1_I2C_DRIVER_MASTER         // ESP-IDF 原生 i2c_master 驱动 / ESP-IDF native i2c_master driver
+    // M5PM1_I2C_DRIVER_BUS removed - causes conflict with M5GFX's i2c_master driver
 } m5pm1_i2c_driver_t;
-
-// ============================
-// ESP-IDF I2C 函数 (i2c_bus)
-// ESP-IDF I2C Functions (i2c_bus)
-// ============================
-
-#ifndef M5PM1_I2C_READ_BYTE
-static inline esp_err_t M5PM1_I2C_READ_BYTE(i2c_bus_device_handle_t dev, uint8_t reg, uint8_t *data)
-{
-    return i2c_bus_read_byte(dev, reg, data);
-}
-#endif
-
-#ifndef M5PM1_I2C_READ_BYTES
-static inline esp_err_t M5PM1_I2C_READ_BYTES(i2c_bus_device_handle_t dev, uint8_t start_reg, size_t len, uint8_t *data)
-{
-    return i2c_bus_read_bytes(dev, start_reg, len, data);
-}
-#endif
-
-#ifndef M5PM1_I2C_READ_REG16
-static inline esp_err_t M5PM1_I2C_READ_REG16(i2c_bus_device_handle_t dev, uint8_t reg, uint16_t *data)
-{
-    uint8_t buf[2];
-    esp_err_t ret = i2c_bus_read_bytes(dev, reg, 2, buf);
-    if (ret == ESP_OK) {
-        // 小端模式：低字节在前
-        // Little-endian: low byte first
-        *data = (uint16_t)buf[0] | ((uint16_t)buf[1] << 8);
-    }
-    return ret;
-}
-#endif
-
-#ifndef M5PM1_I2C_WRITE_BYTE
-static inline esp_err_t M5PM1_I2C_WRITE_BYTE(i2c_bus_device_handle_t dev, uint8_t reg, uint8_t data)
-{
-    return i2c_bus_write_byte(dev, reg, data);
-}
-#endif
-
-#ifndef M5PM1_I2C_WRITE_BYTES
-static inline esp_err_t M5PM1_I2C_WRITE_BYTES(i2c_bus_device_handle_t dev, uint8_t start_reg, size_t len,
-                                              const uint8_t *data)
-{
-    return i2c_bus_write_bytes(dev, start_reg, len, (uint8_t *)data);
-}
-#endif
-
-#ifndef M5PM1_I2C_WRITE_REG16
-static inline esp_err_t M5PM1_I2C_WRITE_REG16(i2c_bus_device_handle_t dev, uint8_t reg, uint16_t data)
-{
-    uint8_t buf[2];
-    // 小端模式：低字节在前
-    // Little-endian: low byte first
-    buf[0] = (uint8_t)(data & 0xFF);
-    buf[1] = (uint8_t)((data >> 8) & 0xFF);
-    return i2c_bus_write_bytes(dev, reg, 2, buf);
-}
-#endif
 
 // ============================
 // ESP-IDF I2C 函数 (i2c_master - 原生驱动)
@@ -270,17 +212,6 @@ static inline esp_err_t M5PM1_I2C_MASTER_WRITE_REG16(i2c_master_dev_handle_t dev
     buf[1] = (uint8_t)(data & 0xFF);
     buf[2] = (uint8_t)((data >> 8) & 0xFF);
     return i2c_master_transmit(dev, buf, 3, -1);
-}
-#endif
-
-// 使用i2c_bus的PM1睡眠模式唤醒信号
-// Wake signal for PM1 sleep mode using i2c_bus
-#ifndef M5PM1_I2C_SEND_WAKE
-static inline esp_err_t M5PM1_I2C_SEND_WAKE(i2c_bus_device_handle_t dev, uint8_t reg)
-{
-    // Read any register to generate I2C start signal for wake
-    uint8_t dummy;
-    return i2c_bus_read_byte(dev, reg, &dummy);
 }
 #endif
 

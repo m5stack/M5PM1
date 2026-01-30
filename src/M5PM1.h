@@ -265,11 +265,11 @@ typedef enum {
     0x3B  // R/W   定时器计数字节3（bit 6:0，最大31位） / Timer counter byte 3 (bit 6:0, max 31 bits)
           //       定时器，单位秒，最大214748364秒(约6.8年) / Timer in seconds, max 214748364 (~6.8 years)
 #define M5PM1_REG_TIM_CFG \
-    0x3C  // R/W   定时器配置 / Timer configuration
-          //       [7-4] 保留 / Reserved
-          //       [3] ARM - 自动重装: 0=单次 1=自动重装 / ARM - auto reload: 0=one-shot, 1=auto
-          //       [2:0] ACTION - 超时动作: 000=停止 001=标志 010=复位 011=开机 100=关机
-          //             ACTION: 000=stop, 001=flag, 010=reboot, 011=power on, 100=shutdown
+    0x3C                        // R/W   定时器配置 / Timer configuration
+                                //       [7-4] 保留 / Reserved
+                                //       [3] ARM - 自动重装: 0=单次 1=自动重装 / ARM - auto reload: 0=one-shot, 1=auto
+                                //       [2:0] ACTION - 超时动作: 000=停止 001=标志 010=复位 011=开机 100=关机
+                                //             ACTION: 000=stop, 001=flag, 010=reboot, 011=power on, 100=shutdown
 #define M5PM1_REG_TIM_KEY 0x3D  // W     写入0xA5重载定时器 / Write 0xA5 to reload timer
 
 // ---- 中断寄存器 ----
@@ -1060,16 +1060,7 @@ public:
      */
     m5pm1_err_t begin(i2c_master_bus_handle_t bus, uint8_t addr = M5PM1_DEFAULT_ADDR,
                       uint32_t speed = M5PM1_I2C_FREQ_100K);
-
-    /**
-     * @brief Initialize with existing i2c_bus handle (esp-idf-lib)
-     * @param bus Existing i2c_bus_handle_t
-     * @param addr I2C address (default 0x6E)
-     * @param speed I2C speed in Hz
-     * @return 成功返回 M5PM1_OK，否则返回错误码
-     *         Return M5PM1_OK on success, error code otherwise
-     */
-    m5pm1_err_t begin(i2c_bus_handle_t bus, uint8_t addr = M5PM1_DEFAULT_ADDR, uint32_t speed = M5PM1_I2C_FREQ_100K);
+    // NOTE: i2c_bus_handle_t overload removed to avoid conflict with M5GFX's i2c_master driver
 #endif
 
     /**
@@ -2436,7 +2427,8 @@ public:
      * @return 成功返回 M5PM1_OK，否则返回错误码
      *         Return M5PM1_OK on success, error code otherwise
      * @note 如果引脚不是输出模式，会自动配置为推挽输出；如果已是输出模式则保持原有配置
-     *       If pin is not output mode, it will be auto-configured as push-pull output; if already output, keeps current config
+     *       If pin is not output mode, it will be auto-configured as push-pull output; if already output, keeps current
+     * config
      * @note 如果使用开漏输出，需要外部上拉电阻
      *       If using open-drain output, external pull-up is required
      * @note 当 refresh=NOW 时，执行后会有 20ms 延迟
@@ -2452,7 +2444,8 @@ public:
      * @note 需要先调用 setAw8737aPulse 并设置 refresh=WAIT，然后调用此函数触发
      *       Call setAw8737aPulse with refresh=WAIT first, then call this to trigger
      * @note 如果引脚不是输出模式，会自动配置为推挽输出；如果已是输出模式则保持原有配置
-     *       If pin is not output mode, it will be auto-configured as push-pull output; if already output, keeps current config
+     *       If pin is not output mode, it will be auto-configured as push-pull output; if already output, keeps current
+     * config
      * @note 如果使用开漏输出，需要外部上拉电阻
      *       If using open-drain output, external pull-up is required
      * @note 执行后会有 20ms 延迟
@@ -2472,7 +2465,8 @@ public:
      * @return 成功返回 M5PM1_OK，否则返回错误码
      *         Return M5PM1_OK on success, error code otherwise
      * @note 如果引脚不是输出模式，会自动配置为推挽输出；如果已是输出模式则保持原有配置
-     *       If pin is not output mode, it will be auto-configured as push-pull output; if already output, keeps current config
+     *       If pin is not output mode, it will be auto-configured as push-pull output; if already output, keeps current
+     * config
      * @note 如果使用开漏输出，需要外部上拉电阻
      *       If using open-drain output, external pull-up is required
      * @note 当 refresh=NOW 时，执行后会有 20ms 延迟
@@ -2489,7 +2483,8 @@ public:
      * @note 需要先调用 setAw8737aMode 并设置 refresh=WAIT，然后调用此函数触发
      *       Call setAw8737aMode with refresh=WAIT first, then call this to trigger
      * @note 如果引脚不是输出模式，会自动配置为推挽输出；如果已是输出模式则保持原有配置
-     *       If pin is not output mode, it will be auto-configured as push-pull output; if already output, keeps current config
+     *       If pin is not output mode, it will be auto-configured as push-pull output; if already output, keeps current
+     * config
      * @note 如果使用开漏输出，需要外部上拉电阻
      *       If using open-drain output, external pull-up is required
      * @note 执行后会有 20ms 延迟
@@ -2841,16 +2836,16 @@ private:
 
     // AW8737A 配置状态缓存
     // AW8737A configuration state cache
-    bool _aw8737aConfigured;                   // 是否已调用 setAw8737aPulse 配置
-                                               // Whether setAw8737aPulse has been called
-    m5pm1_gpio_num_t _aw8737aPin;              // 配置的引脚号
-                                               // Configured pin number
-    m5pm1_aw8737a_pulse_t _aw8737aPulseNum;    // 配置的脉冲数
-                                               // Configured pulse count
-    uint8_t _aw8737aRegValue;                  // 缓存的寄存器值（不含 REFRESH 位）
-                                               // Cached register value (without REFRESH bit)
-    bool _aw8737aStateValid;                   // 缓存有效性标志
-                                               // Cache validity flag
+    bool _aw8737aConfigured;                 // 是否已调用 setAw8737aPulse 配置
+                                             // Whether setAw8737aPulse has been called
+    m5pm1_gpio_num_t _aw8737aPin;            // 配置的引脚号
+                                             // Configured pin number
+    m5pm1_aw8737a_pulse_t _aw8737aPulseNum;  // 配置的脉冲数
+                                             // Configured pulse count
+    uint8_t _aw8737aRegValue;                // 缓存的寄存器值（不含 REFRESH 位）
+                                             // Cached register value (without REFRESH bit)
+    bool _aw8737aStateValid;                 // 缓存有效性标志
+                                             // Cache validity flag
 
     // Pin 状态缓存
     // Pin status cache
@@ -2866,12 +2861,11 @@ private:
     // I2C driver type selection
     m5pm1_i2c_driver_t _i2cDriverType;
 
-    // I2C 句柄
-    // I2C handles
+    // I2C 句柄 (only i2c_master driver supported)
+    // I2C handles (only i2c_master driver supported)
     i2c_master_bus_handle_t _i2c_master_bus;
     i2c_master_dev_handle_t _i2c_master_dev;
-    i2c_bus_handle_t _i2c_bus;
-    i2c_bus_device_handle_t _i2c_device;
+    // NOTE: i2c_bus handles removed to avoid conflict with M5GFX
 
     // I2C 管理标志
     // I2C management flags
