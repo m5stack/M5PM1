@@ -1050,8 +1050,9 @@ public:
     m5pm1_err_t begin(i2c_port_t port = I2C_NUM_0, uint8_t addr = M5PM1_DEFAULT_ADDR, int sda = 21, int scl = 22,
                       uint32_t speed = M5PM1_I2C_FREQ_100K);
 
+#if M5PM1_HAS_I2C_MASTER
     /**
-     * @brief Initialize with existing i2c_master_bus handle (ESP-IDF native)
+     * @brief Initialize with existing i2c_master_bus handle (ESP-IDF native, IDF >= 5.3.0)
      * @param bus Existing i2c_master_bus_handle_t
      * @param addr I2C address (default 0x6E)
      * @param speed I2C speed in Hz
@@ -1060,6 +1061,7 @@ public:
      */
     m5pm1_err_t begin(i2c_master_bus_handle_t bus, uint8_t addr = M5PM1_DEFAULT_ADDR,
                       uint32_t speed = M5PM1_I2C_FREQ_100K);
+#endif  // M5PM1_HAS_I2C_MASTER
 
 #if M5PM1_HAS_I2C_BUS
     /**
@@ -1072,21 +1074,20 @@ public:
      */
     m5pm1_err_t begin(i2c_bus_handle_t bus, uint8_t addr = M5PM1_DEFAULT_ADDR, uint32_t speed = M5PM1_I2C_FREQ_100K);
 #else
-        /**
-         * @brief i2c_bus overload is intentionally kept for diagnostics when unavailable
-         * @note This overload exists only to provide a clear compile-time message when called.
-         */
-        inline m5pm1_err_t begin(i2c_bus_handle_t bus, uint8_t addr = M5PM1_DEFAULT_ADDR,
-                                                         uint32_t speed = M5PM1_I2C_FREQ_100K)
-        {
-                (void)bus;
-                (void)addr;
-                (void)speed;
-#if defined(__GNUC__) || defined(__clang__)
-                _m5pm1_i2c_bus_api_unavailable();
-#endif
-                return M5PM1_ERR_NOT_SUPPORTED;
-        }
+    /**
+     * @brief i2c_bus 重载在不可用时直接返回错误
+     *        i2c_bus overload returns error when unavailable
+     * @note i2c_bus API 不可用时此重载仍保留，以避免链接期符号缺失。
+     *       This overload is kept to avoid missing symbol errors at link time.
+     */
+    inline m5pm1_err_t begin(i2c_bus_handle_t bus, uint8_t addr = M5PM1_DEFAULT_ADDR,
+                             uint32_t speed = M5PM1_I2C_FREQ_100K)
+    {
+        (void)bus;
+        (void)addr;
+        (void)speed;
+        return M5PM1_ERR_NOT_SUPPORTED;
+    }
 #endif
 #endif
 
@@ -2454,7 +2455,8 @@ public:
      * @return 成功返回 M5PM1_OK，否则返回错误码
      *         Return M5PM1_OK on success, error code otherwise
      * @note 如果引脚不是输出模式，会自动配置为推挽输出；如果已是输出模式则保持原有配置
-     *       If pin is not output mode, it will be auto-configured as push-pull output; if already output, keeps current config
+     *       If pin is not output mode, it will be auto-configured as push-pull output; if already output, keeps current
+     * config
      * @note 如果使用开漏输出，需要外部上拉电阻
      *       If using open-drain output, external pull-up is required
      * @note 当 refresh=NOW 时，执行后会有 20ms 延迟
@@ -2470,7 +2472,8 @@ public:
      * @note 需要先调用 setAw8737aPulse 并设置 refresh=WAIT，然后调用此函数触发
      *       Call setAw8737aPulse with refresh=WAIT first, then call this to trigger
      * @note 如果引脚不是输出模式，会自动配置为推挽输出；如果已是输出模式则保持原有配置
-     *       If pin is not output mode, it will be auto-configured as push-pull output; if already output, keeps current config
+     *       If pin is not output mode, it will be auto-configured as push-pull output; if already output, keeps current
+     * config
      * @note 如果使用开漏输出，需要外部上拉电阻
      *       If using open-drain output, external pull-up is required
      * @note 执行后会有 20ms 延迟
@@ -2490,7 +2493,8 @@ public:
      * @return 成功返回 M5PM1_OK，否则返回错误码
      *         Return M5PM1_OK on success, error code otherwise
      * @note 如果引脚不是输出模式，会自动配置为推挽输出；如果已是输出模式则保持原有配置
-     *       If pin is not output mode, it will be auto-configured as push-pull output; if already output, keeps current config
+     *       If pin is not output mode, it will be auto-configured as push-pull output; if already output, keeps current
+     * config
      * @note 如果使用开漏输出，需要外部上拉电阻
      *       If using open-drain output, external pull-up is required
      * @note 当 refresh=NOW 时，执行后会有 20ms 延迟
@@ -2507,7 +2511,8 @@ public:
      * @note 需要先调用 setAw8737aMode 并设置 refresh=WAIT，然后调用此函数触发
      *       Call setAw8737aMode with refresh=WAIT first, then call this to trigger
      * @note 如果引脚不是输出模式，会自动配置为推挽输出；如果已是输出模式则保持原有配置
-     *       If pin is not output mode, it will be auto-configured as push-pull output; if already output, keeps current config
+     *       If pin is not output mode, it will be auto-configured as push-pull output; if already output, keeps current
+     * config
      * @note 如果使用开漏输出，需要外部上拉电阻
      *       If using open-drain output, external pull-up is required
      * @note 执行后会有 20ms 延迟
@@ -2859,16 +2864,16 @@ private:
 
     // AW8737A 配置状态缓存
     // AW8737A configuration state cache
-    bool _aw8737aConfigured;                   // 是否已调用 setAw8737aPulse 配置
-                                               // Whether setAw8737aPulse has been called
-    m5pm1_gpio_num_t _aw8737aPin;              // 配置的引脚号
-                                               // Configured pin number
-    m5pm1_aw8737a_pulse_t _aw8737aPulseNum;    // 配置的脉冲数
-                                               // Configured pulse count
-    uint8_t _aw8737aRegValue;                  // 缓存的寄存器值（不含 REFRESH 位）
-                                               // Cached register value (without REFRESH bit)
-    bool _aw8737aStateValid;                   // 缓存有效性标志
-                                               // Cache validity flag
+    bool _aw8737aConfigured;                 // 是否已调用 setAw8737aPulse 配置
+                                             // Whether setAw8737aPulse has been called
+    m5pm1_gpio_num_t _aw8737aPin;            // 配置的引脚号
+                                             // Configured pin number
+    m5pm1_aw8737a_pulse_t _aw8737aPulseNum;  // 配置的脉冲数
+                                             // Configured pulse count
+    uint8_t _aw8737aRegValue;                // 缓存的寄存器值（不含 REFRESH 位）
+                                             // Cached register value (without REFRESH bit)
+    bool _aw8737aStateValid;                 // 缓存有效性标志
+                                             // Cache validity flag
 
     // Pin 状态缓存
     // Pin status cache
@@ -2886,8 +2891,10 @@ private:
 
     // I2C 句柄
     // I2C handles
+#if M5PM1_HAS_I2C_MASTER
     i2c_master_bus_handle_t _i2c_master_bus;
     i2c_master_dev_handle_t _i2c_master_dev;
+#endif  // M5PM1_HAS_I2C_MASTER
 #if M5PM1_HAS_I2C_BUS
     i2c_bus_handle_t _i2c_bus;
     i2c_bus_device_handle_t _i2c_device;

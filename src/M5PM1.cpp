@@ -159,17 +159,19 @@ M5PM1::M5PM1()
     _sda  = -1;
     _scl  = -1;
 #else
-    _i2cDriverType  = M5PM1_I2C_DRIVER_NONE;
+    _i2cDriverType = M5PM1_I2C_DRIVER_NONE;
+#if M5PM1_HAS_I2C_MASTER
     _i2c_master_bus = nullptr;
     _i2c_master_dev = nullptr;
+#endif  // M5PM1_HAS_I2C_MASTER
 #if M5PM1_HAS_I2C_BUS
-    _i2c_bus        = nullptr;
-    _i2c_device     = nullptr;
+    _i2c_bus    = nullptr;
+    _i2c_device = nullptr;
 #endif
-    _busExternal    = false;
-    _sda            = -1;
-    _scl            = -1;
-    _port           = I2C_NUM_0;
+    _busExternal = false;
+    _sda         = -1;
+    _scl         = -1;
+    _port        = I2C_NUM_0;
 #endif
 }
 
@@ -178,6 +180,7 @@ M5PM1::~M5PM1()
 #ifndef ARDUINO
     // Cleanup based on driver type
     switch (_i2cDriverType) {
+#if M5PM1_HAS_I2C_MASTER
         case M5PM1_I2C_DRIVER_SELF_CREATED:
             if (_i2c_master_dev) {
                 i2c_master_bus_rm_device(_i2c_master_dev);
@@ -195,12 +198,23 @@ M5PM1::~M5PM1()
                 _i2c_master_dev = nullptr;
             }
             break;
+#endif  // M5PM1_HAS_I2C_MASTER
 
 #if M5PM1_HAS_I2C_BUS
         case M5PM1_I2C_DRIVER_BUS:
             if (_i2c_device) {
                 i2c_bus_device_delete(&_i2c_device);
                 _i2c_device = nullptr;
+            }
+            break;
+#endif
+
+#if !M5PM1_HAS_I2C_MASTER && !M5PM1_HAS_I2C_BUS
+        case M5PM1_I2C_DRIVER_LEGACY:
+            // 传统驱动由 i2c_driver_delete 管理，仅在 SELF_CREATED 时才卸载
+            // Legacy driver is managed by i2c_driver_delete, uninstall only when self-created
+            if (!_busExternal) {
+                i2c_driver_delete(_port);
             }
             break;
 #endif
@@ -247,7 +261,7 @@ m5pm1_err_t M5PM1::begin(TwoWire* wire, uint8_t addr, int8_t sda, int8_t scl, ui
 
     // 尝试唤醒设备 - 发送 I2C START 信号
     // Try to wake up the device - send I2C START signal
-    M5PM1_I2C_SEND_WAKE(_wire, _addr);
+    M5PM1_I2C_ARDUINO_SEND_WAKE(_wire, _addr);
     M5PM1_DELAY_MS(10);
 
     // 步骤3：验证设备通信（失败则等待800ms重试一次）
@@ -257,7 +271,7 @@ m5pm1_err_t M5PM1::begin(TwoWire* wire, uint8_t addr, int8_t sda, int8_t scl, ui
         M5PM1_DELAY_MS(800);
         // 重试前再次发送唤醒信号
         // Send wake signal again before retry
-        M5PM1_I2C_SEND_WAKE(_wire, _addr);
+        M5PM1_I2C_ARDUINO_SEND_WAKE(_wire, _addr);
         M5PM1_DELAY_MS(10);
         if (!_initDevice()) {
             // 100K 再次失败，尝试 400K
@@ -274,7 +288,7 @@ m5pm1_err_t M5PM1::begin(TwoWire* wire, uint8_t addr, int8_t sda, int8_t scl, ui
 
             // 尝试唤醒设备 - 发送 I2C START 信号
             // Try to wake up the device - send I2C START signal
-            M5PM1_I2C_SEND_WAKE(_wire, _addr);
+            M5PM1_I2C_ARDUINO_SEND_WAKE(_wire, _addr);
             M5PM1_DELAY_MS(10);
 
             if (!_initDevice()) {
@@ -320,12 +334,11 @@ m5pm1_err_t M5PM1::begin(TwoWire* wire, uint8_t addr, int8_t sda, int8_t scl, ui
 
 m5pm1_err_t M5PM1::begin(i2c_port_t port, uint8_t addr, int sda, int scl, uint32_t speed)
 {
-    _addr          = addr;
-    _busExternal   = false;
-    _i2cDriverType = M5PM1_I2C_DRIVER_SELF_CREATED;
-    _port          = port;
-    _sda           = sda;
-    _scl           = scl;
+    _addr        = addr;
+    _busExternal = false;
+    _port        = port;
+    _sda         = sda;
+    _scl         = scl;
 
     // 步骤1：校验用户频率并记录
     // Step 1: Validate requested speed and store it
@@ -336,6 +349,9 @@ m5pm1_err_t M5PM1::begin(i2c_port_t port, uint8_t addr, int sda, int scl, uint32
     } else {
         _requestedSpeed = speed;
     }
+
+#if M5PM1_HAS_I2C_MASTER
+    _i2cDriverType = M5PM1_I2C_DRIVER_SELF_CREATED;
 
     // 步骤2：创建I2C主总线
     // Step 2: Create I2C master bus
@@ -467,8 +483,123 @@ m5pm1_err_t M5PM1::begin(i2c_port_t port, uint8_t addr, int sda, int scl, uint32
     _initialized = true;
     M5PM1_LOG_I(TAG, "M5PM1 initialized at address 0x%02X (I2C: %lu Hz)", _addr, (unsigned long)_requestedSpeed);
     return M5PM1_OK;
+
+#else   // !M5PM1_HAS_I2C_MASTER — 传统 driver/i2c.h 路径 / Legacy driver/i2c.h path
+    _i2cDriverType = M5PM1_I2C_DRIVER_LEGACY;
+
+    // 步骤2：安装传统 I2C 驱动（100KHz 起始）
+    // Step 2: Install legacy I2C driver starting at 100KHz
+    i2c_config_t conf = {
+        .mode          = I2C_MODE_MASTER,
+        .sda_io_num    = sda,
+        .scl_io_num    = scl,
+        .sda_pullup_en = GPIO_PULLUP_ENABLE,
+        .scl_pullup_en = GPIO_PULLUP_ENABLE,
+        .master        = {.clk_speed = M5PM1_I2C_FREQ_100K},
+        .clk_flags     = 0,
+    };
+
+    esp_err_t ret = i2c_param_config(port, &conf);
+    if (ret != ESP_OK) {
+        M5PM1_LOG_E(TAG, "i2c_param_config failed: %s", esp_err_to_name(ret));
+        return M5PM1_ERR_I2C_CONFIG;
+    }
+
+    ret = i2c_driver_install(port, I2C_MODE_MASTER, 0, 0, 0);
+    if (ret != ESP_OK) {
+        M5PM1_LOG_E(TAG, "i2c_driver_install failed: %s", esp_err_to_name(ret));
+        return M5PM1_ERR_I2C_CONFIG;
+    }
+
+    // 尝试唤醒设备
+    // Try to wake up the device
+    M5PM1_I2C_LEGACY_SEND_WAKE(port, _addr);
+    M5PM1_DELAY_MS(10);
+
+    // 步骤3：验证设备通信（失败则等待800ms重试一次）
+    // Step 3: Verify device communication (retry once after 800ms if failed)
+    if (!_initDevice()) {
+        M5PM1_LOG_W(TAG, "Device init failed, retrying after 800ms...");
+        M5PM1_DELAY_MS(800);
+        M5PM1_I2C_LEGACY_SEND_WAKE(port, _addr);
+        M5PM1_DELAY_MS(10);
+        if (!_initDevice()) {
+            // 100K 再次失败，尝试 400K
+            // 100K failed again, try 400K
+            M5PM1_LOG_W(TAG, "Device init failed at 100KHz (retry), trying 400KHz...");
+
+            // 以400K重新安装驱动
+            // Reinstall driver at 400K
+            i2c_driver_delete(port);
+            conf.master.clk_speed = M5PM1_I2C_FREQ_400K;
+            ret                   = i2c_param_config(port, &conf);
+            if (ret != ESP_OK) {
+                M5PM1_LOG_E(TAG, "i2c_param_config 400K failed: %s", esp_err_to_name(ret));
+                return M5PM1_ERR_I2C_CONFIG;
+            }
+
+            ret = i2c_driver_install(port, I2C_MODE_MASTER, 0, 0, 0);
+            if (ret != ESP_OK) {
+                M5PM1_LOG_E(TAG, "i2c_driver_install 400K failed: %s", esp_err_to_name(ret));
+                return M5PM1_ERR_I2C_CONFIG;
+            }
+
+            // 尝试唤醒设备
+            // Try to wake up the device
+            M5PM1_I2C_LEGACY_SEND_WAKE(port, _addr);
+            M5PM1_DELAY_MS(10);
+
+            if (!_initDevice()) {
+                M5PM1_LOG_E(TAG, "Failed at 100KHz (twice) and 400KHz");
+                i2c_driver_delete(port);
+                return M5PM1_ERR_I2C_COMM;
+            }
+        }
+    }
+    _initialized = true;
+
+    // 步骤5：配置设备I2C参数（关闭睡眠 + 目标频率）
+    // Step 5: Configure device I2C (sleep off + target speed)
+    m5pm1_i2c_speed_t targetSpeed =
+        (_requestedSpeed == M5PM1_I2C_FREQ_400K) ? M5PM1_I2C_SPEED_400K : M5PM1_I2C_SPEED_100K;
+    if (setI2cConfig(0, targetSpeed) != M5PM1_OK) {
+        M5PM1_LOG_W(TAG, "Failed to set I2C config");
+    }
+
+    // 步骤6：若目标频率与100K不同，重新安装驱动至目标频率
+    // Step 6: Reinstall driver at target speed if different from 100K
+    if (_requestedSpeed != M5PM1_I2C_FREQ_100K) {
+        i2c_driver_delete(port);
+        conf.master.clk_speed = _requestedSpeed;
+        ret                   = i2c_param_config(port, &conf);
+        if (ret != ESP_OK) {
+            M5PM1_LOG_E(TAG, "i2c_param_config target speed failed: %s", esp_err_to_name(ret));
+            _initialized = false;
+            return M5PM1_ERR_I2C_CONFIG;
+        }
+
+        ret = i2c_driver_install(port, I2C_MODE_MASTER, 0, 0, 0);
+        if (ret != ESP_OK) {
+            M5PM1_LOG_E(TAG, "i2c_driver_install target speed failed: %s", esp_err_to_name(ret));
+            _initialized = false;
+            return M5PM1_ERR_I2C_CONFIG;
+        }
+    }
+
+    // 步骤7：刷新快照并完成初始化
+    // Step 7: Refresh snapshot and finish initialization
+    _lastCommTime = M5PM1_GET_TIME_MS();
+    if (!_snapshotAll()) {
+        _clearAll();
+    }
+
+    _initialized = true;
+    M5PM1_LOG_I(TAG, "M5PM1 initialized at address 0x%02X (I2C: %lu Hz)", _addr, (unsigned long)_requestedSpeed);
+    return M5PM1_OK;
+#endif  // M5PM1_HAS_I2C_MASTER
 }
 
+#if M5PM1_HAS_I2C_MASTER
 m5pm1_err_t M5PM1::begin(i2c_master_bus_handle_t bus, uint8_t addr, uint32_t speed)
 {
     _addr           = addr;
@@ -585,6 +716,7 @@ m5pm1_err_t M5PM1::begin(i2c_master_bus_handle_t bus, uint8_t addr, uint32_t spe
     M5PM1_LOG_I(TAG, "M5PM1 initialized at address 0x%02X (I2C: %lu Hz)", _addr, (unsigned long)_requestedSpeed);
     return M5PM1_OK;
 }
+#endif  // M5PM1_HAS_I2C_MASTER
 
 #if M5PM1_HAS_I2C_BUS
 m5pm1_err_t M5PM1::begin(i2c_bus_handle_t bus, uint8_t addr, uint32_t speed)
@@ -614,7 +746,7 @@ m5pm1_err_t M5PM1::begin(i2c_bus_handle_t bus, uint8_t addr, uint32_t speed)
 
     // 尝试唤醒设备
     // Try to wake up the device
-    M5PM1_I2C_SEND_WAKE(_i2c_device, M5PM1_REG_HW_REV);
+    M5PM1_I2C_BUS_SEND_WAKE(_i2c_device, M5PM1_REG_HW_REV);
     M5PM1_DELAY_MS(10);
 
     // 步骤3：验证设备通信（失败则等待800ms重试一次）
@@ -624,7 +756,7 @@ m5pm1_err_t M5PM1::begin(i2c_bus_handle_t bus, uint8_t addr, uint32_t speed)
         M5PM1_DELAY_MS(800);
         // 重试前再次发送唤醒信号
         // Send wake signal again before retry
-        M5PM1_I2C_SEND_WAKE(_i2c_device, M5PM1_REG_HW_REV);
+        M5PM1_I2C_BUS_SEND_WAKE(_i2c_device, M5PM1_REG_HW_REV);
         M5PM1_DELAY_MS(10);
         if (!_initDevice()) {
             // 100K 再次失败，尝试 400K
@@ -646,7 +778,7 @@ m5pm1_err_t M5PM1::begin(i2c_bus_handle_t bus, uint8_t addr, uint32_t speed)
 
             // 尝试唤醒设备
             // Try to wake up the device
-            M5PM1_I2C_SEND_WAKE(_i2c_device, M5PM1_REG_HW_REV);
+            M5PM1_I2C_BUS_SEND_WAKE(_i2c_device, M5PM1_REG_HW_REV);
             M5PM1_DELAY_MS(10);
 
             if (!_initDevice()) {
@@ -860,9 +992,9 @@ bool M5PM1::_snapshotAw8737a()
 
     // 解析寄存器值（不含 REFRESH 位）
     // Parse register value (without REFRESH bit)
-    _aw8737aRegValue = regValue & 0x7F;
-    _aw8737aPin      = (m5pm1_gpio_num_t)(regValue & 0x1F);
-    _aw8737aPulseNum = (m5pm1_aw8737a_pulse_t)((regValue >> 5) & 0x03);
+    _aw8737aRegValue   = regValue & 0x7F;
+    _aw8737aPin        = (m5pm1_gpio_num_t)(regValue & 0x1F);
+    _aw8737aPulseNum   = (m5pm1_aw8737a_pulse_t)((regValue >> 5) & 0x03);
     _aw8737aStateValid = true;
 
     return true;
@@ -1243,16 +1375,23 @@ bool M5PM1::_writeReg(uint8_t reg, uint8_t value)
     bool success = false;
     for (int attempt = 0; attempt < M5PM1_I2C_RETRY_COUNT; ++attempt) {
 #ifdef ARDUINO
-        success = M5PM1_I2C_WRITE_BYTE(_wire, _addr, reg, value);
+        success = M5PM1_I2C_ARDUINO_WRITE_BYTE(_wire, _addr, reg, value);
 #else
         switch (_i2cDriverType) {
+#if M5PM1_HAS_I2C_MASTER
             case M5PM1_I2C_DRIVER_SELF_CREATED:
             case M5PM1_I2C_DRIVER_MASTER:
                 success = M5PM1_I2C_MASTER_WRITE_BYTE(_i2c_master_dev, reg, value) == ESP_OK;
                 break;
+#endif  // M5PM1_HAS_I2C_MASTER
 #if M5PM1_HAS_I2C_BUS
             case M5PM1_I2C_DRIVER_BUS:
-                success = M5PM1_I2C_WRITE_BYTE(_i2c_device, reg, value) == ESP_OK;
+                success = M5PM1_I2C_BUS_WRITE_BYTE(_i2c_device, reg, value) == ESP_OK;
+                break;
+#endif
+#if !M5PM1_HAS_I2C_MASTER && !M5PM1_HAS_I2C_BUS
+            case M5PM1_I2C_DRIVER_LEGACY:
+                success = M5PM1_I2C_LEGACY_WRITE_BYTE(_port, _addr, reg, value) == ESP_OK;
                 break;
 #endif
             default:
@@ -1277,16 +1416,23 @@ bool M5PM1::_writeReg16(uint8_t reg, uint16_t value)
     bool success = false;
     for (int attempt = 0; attempt < M5PM1_I2C_RETRY_COUNT; ++attempt) {
 #ifdef ARDUINO
-        success = M5PM1_I2C_WRITE_REG16(_wire, _addr, reg, value);
+        success = M5PM1_I2C_ARDUINO_WRITE_REG16(_wire, _addr, reg, value);
 #else
         switch (_i2cDriverType) {
+#if M5PM1_HAS_I2C_MASTER
             case M5PM1_I2C_DRIVER_SELF_CREATED:
             case M5PM1_I2C_DRIVER_MASTER:
                 success = M5PM1_I2C_MASTER_WRITE_REG16(_i2c_master_dev, reg, value) == ESP_OK;
                 break;
+#endif  // M5PM1_HAS_I2C_MASTER
 #if M5PM1_HAS_I2C_BUS
             case M5PM1_I2C_DRIVER_BUS:
-                success = M5PM1_I2C_WRITE_REG16(_i2c_device, reg, value) == ESP_OK;
+                success = M5PM1_I2C_BUS_WRITE_REG16(_i2c_device, reg, value) == ESP_OK;
+                break;
+#endif
+#if !M5PM1_HAS_I2C_MASTER && !M5PM1_HAS_I2C_BUS
+            case M5PM1_I2C_DRIVER_LEGACY:
+                success = M5PM1_I2C_LEGACY_WRITE_REG16(_port, _addr, reg, value) == ESP_OK;
                 break;
 #endif
             default:
@@ -1311,16 +1457,23 @@ bool M5PM1::_readReg(uint8_t reg, uint8_t* value)
     bool success = false;
     for (int attempt = 0; attempt < M5PM1_I2C_RETRY_COUNT; ++attempt) {
 #ifdef ARDUINO
-        success = M5PM1_I2C_READ_BYTE(_wire, _addr, reg, value);
+        success = M5PM1_I2C_ARDUINO_READ_BYTE(_wire, _addr, reg, value);
 #else
         switch (_i2cDriverType) {
+#if M5PM1_HAS_I2C_MASTER
             case M5PM1_I2C_DRIVER_SELF_CREATED:
             case M5PM1_I2C_DRIVER_MASTER:
                 success = M5PM1_I2C_MASTER_READ_BYTE(_i2c_master_dev, reg, value) == ESP_OK;
                 break;
+#endif  // M5PM1_HAS_I2C_MASTER
 #if M5PM1_HAS_I2C_BUS
             case M5PM1_I2C_DRIVER_BUS:
-                success = M5PM1_I2C_READ_BYTE(_i2c_device, reg, value) == ESP_OK;
+                success = M5PM1_I2C_BUS_READ_BYTE(_i2c_device, reg, value) == ESP_OK;
+                break;
+#endif
+#if !M5PM1_HAS_I2C_MASTER && !M5PM1_HAS_I2C_BUS
+            case M5PM1_I2C_DRIVER_LEGACY:
+                success = M5PM1_I2C_LEGACY_READ_BYTE(_port, _addr, reg, value) == ESP_OK;
                 break;
 #endif
             default:
@@ -1345,16 +1498,23 @@ bool M5PM1::_readReg16(uint8_t reg, uint16_t* value)
     bool success = false;
     for (int attempt = 0; attempt < M5PM1_I2C_RETRY_COUNT; ++attempt) {
 #ifdef ARDUINO
-        success = M5PM1_I2C_READ_REG16(_wire, _addr, reg, value);
+        success = M5PM1_I2C_ARDUINO_READ_REG16(_wire, _addr, reg, value);
 #else
         switch (_i2cDriverType) {
+#if M5PM1_HAS_I2C_MASTER
             case M5PM1_I2C_DRIVER_SELF_CREATED:
             case M5PM1_I2C_DRIVER_MASTER:
                 success = M5PM1_I2C_MASTER_READ_REG16(_i2c_master_dev, reg, value) == ESP_OK;
                 break;
+#endif  // M5PM1_HAS_I2C_MASTER
 #if M5PM1_HAS_I2C_BUS
             case M5PM1_I2C_DRIVER_BUS:
-                success = M5PM1_I2C_READ_REG16(_i2c_device, reg, value) == ESP_OK;
+                success = M5PM1_I2C_BUS_READ_REG16(_i2c_device, reg, value) == ESP_OK;
+                break;
+#endif
+#if !M5PM1_HAS_I2C_MASTER && !M5PM1_HAS_I2C_BUS
+            case M5PM1_I2C_DRIVER_LEGACY:
+                success = M5PM1_I2C_LEGACY_READ_REG16(_port, _addr, reg, value) == ESP_OK;
                 break;
 #endif
             default:
@@ -1379,16 +1539,23 @@ bool M5PM1::_writeBytes(uint8_t reg, const uint8_t* data, uint8_t len)
     bool success = false;
     for (int attempt = 0; attempt < M5PM1_I2C_RETRY_COUNT; ++attempt) {
 #ifdef ARDUINO
-        success = M5PM1_I2C_WRITE_BYTES(_wire, _addr, reg, len, data);
+        success = M5PM1_I2C_ARDUINO_WRITE_BYTES(_wire, _addr, reg, len, data);
 #else
         switch (_i2cDriverType) {
+#if M5PM1_HAS_I2C_MASTER
             case M5PM1_I2C_DRIVER_SELF_CREATED:
             case M5PM1_I2C_DRIVER_MASTER:
                 success = M5PM1_I2C_MASTER_WRITE_BYTES(_i2c_master_dev, reg, len, data) == ESP_OK;
                 break;
+#endif  // M5PM1_HAS_I2C_MASTER
 #if M5PM1_HAS_I2C_BUS
             case M5PM1_I2C_DRIVER_BUS:
-                success = M5PM1_I2C_WRITE_BYTES(_i2c_device, reg, len, data) == ESP_OK;
+                success = M5PM1_I2C_BUS_WRITE_BYTES(_i2c_device, reg, len, data) == ESP_OK;
+                break;
+#endif
+#if !M5PM1_HAS_I2C_MASTER && !M5PM1_HAS_I2C_BUS
+            case M5PM1_I2C_DRIVER_LEGACY:
+                success = M5PM1_I2C_LEGACY_WRITE_BYTES(_port, _addr, reg, len, data) == ESP_OK;
                 break;
 #endif
             default:
@@ -1413,16 +1580,23 @@ bool M5PM1::_readBytes(uint8_t reg, uint8_t* data, uint8_t len)
     bool success = false;
     for (int attempt = 0; attempt < M5PM1_I2C_RETRY_COUNT; ++attempt) {
 #ifdef ARDUINO
-        success = M5PM1_I2C_READ_BYTES(_wire, _addr, reg, len, data);
+        success = M5PM1_I2C_ARDUINO_READ_BYTES(_wire, _addr, reg, len, data);
 #else
         switch (_i2cDriverType) {
+#if M5PM1_HAS_I2C_MASTER
             case M5PM1_I2C_DRIVER_SELF_CREATED:
             case M5PM1_I2C_DRIVER_MASTER:
                 success = M5PM1_I2C_MASTER_READ_BYTES(_i2c_master_dev, reg, len, data) == ESP_OK;
                 break;
+#endif  // M5PM1_HAS_I2C_MASTER
 #if M5PM1_HAS_I2C_BUS
             case M5PM1_I2C_DRIVER_BUS:
-                success = M5PM1_I2C_READ_BYTES(_i2c_device, reg, len, data) == ESP_OK;
+                success = M5PM1_I2C_BUS_READ_BYTES(_i2c_device, reg, len, data) == ESP_OK;
+                break;
+#endif
+#if !M5PM1_HAS_I2C_MASTER && !M5PM1_HAS_I2C_BUS
+            case M5PM1_I2C_DRIVER_LEGACY:
+                success = M5PM1_I2C_LEGACY_READ_BYTES(_port, _addr, reg, len, data) == ESP_OK;
                 break;
 #endif
             default:
@@ -4078,8 +4252,8 @@ m5pm1_err_t M5PM1::refreshAw8737aPulse()
     // 输出详细日志
     // Output detailed log
     const char* driveStr = (_pinStatus[_aw8737aPin].drive == M5PM1_GPIO_DRIVE_PUSHPULL) ? "PUSH-PULL" : "OPEN-DRAIN";
-    M5PM1_LOG_I(TAG, "AW8737A pulse refresh: pin=%d, pulseNum=%d, mode=OUTPUT, drive=%s",
-                _aw8737aPin, _aw8737aPulseNum, driveStr);
+    M5PM1_LOG_I(TAG, "AW8737A pulse refresh: pin=%d, pulseNum=%d, mode=OUTPUT, drive=%s", _aw8737aPin, _aw8737aPulseNum,
+                driveStr);
 
     M5PM1_DELAY_MS(20);
     _autoSnapshotUpdate(M5PM1_SNAPSHOT_DOMAIN_AW8737A);
@@ -4372,6 +4546,7 @@ m5pm1_err_t M5PM1::switchI2cSpeed(m5pm1_i2c_speed_t speed)
 #else
     esp_err_t ret;
     switch (_i2cDriverType) {
+#if M5PM1_HAS_I2C_MASTER
         case M5PM1_I2C_DRIVER_SELF_CREATED:
         case M5PM1_I2C_DRIVER_MASTER: {
             if (_i2c_master_dev != nullptr) {
@@ -4405,6 +4580,7 @@ m5pm1_err_t M5PM1::switchI2cSpeed(m5pm1_i2c_speed_t speed)
             }
             break;
         }
+#endif  // M5PM1_HAS_I2C_MASTER
 #if M5PM1_HAS_I2C_BUS
         case M5PM1_I2C_DRIVER_BUS:
             if (_i2c_device != nullptr) {
@@ -4422,7 +4598,26 @@ m5pm1_err_t M5PM1::switchI2cSpeed(m5pm1_i2c_speed_t speed)
                 }
             }
             break;
-#endif
+#endif  // M5PM1_HAS_I2C_BUS
+#if !M5PM1_HAS_I2C_MASTER && !M5PM1_HAS_I2C_BUS
+        case M5PM1_I2C_DRIVER_LEGACY: {
+            i2c_config_t conf     = {};
+            conf.mode             = I2C_MODE_MASTER;
+            conf.sda_io_num       = _sda;
+            conf.scl_io_num       = _scl;
+            conf.sda_pullup_en    = GPIO_PULLUP_ENABLE;
+            conf.scl_pullup_en    = GPIO_PULLUP_ENABLE;
+            conf.master.clk_speed = targetFreq;
+            conf.clk_flags        = 0;
+            ret                   = i2c_param_config(_port, &conf);
+            if (ret != ESP_OK) {
+                M5PM1_LOG_E(TAG, "i2c_param_config failed: %s", esp_err_to_name(ret));
+                return M5PM1_ERR_I2C_CONFIG;
+            }
+            M5PM1_LOG_I(TAG, "Legacy I2C reconfigured to %lu Hz", (unsigned long)targetFreq);
+            break;
+        }
+#endif  // !M5PM1_HAS_I2C_MASTER && !M5PM1_HAS_I2C_BUS
         default:
             M5PM1_LOG_E(TAG, "Unknown I2C driver type");
             return M5PM1_ERR_INTERNAL;
@@ -4440,6 +4635,7 @@ m5pm1_err_t M5PM1::switchI2cSpeed(m5pm1_i2c_speed_t speed)
         M5PM1_DELAY_MS(10);
 #else
         switch (_i2cDriverType) {
+#if M5PM1_HAS_I2C_MASTER
             case M5PM1_I2C_DRIVER_SELF_CREATED:
             case M5PM1_I2C_DRIVER_MASTER: {
                 if (_i2c_master_dev != nullptr) {
@@ -4455,6 +4651,7 @@ m5pm1_err_t M5PM1::switchI2cSpeed(m5pm1_i2c_speed_t speed)
                 }
                 break;
             }
+#endif  // M5PM1_HAS_I2C_MASTER
 #if M5PM1_HAS_I2C_BUS
             case M5PM1_I2C_DRIVER_BUS:
                 if (_i2c_device != nullptr) {
@@ -4462,7 +4659,21 @@ m5pm1_err_t M5PM1::switchI2cSpeed(m5pm1_i2c_speed_t speed)
                     _i2c_device = i2c_bus_device_create(_i2c_bus, _addr, originalFreq);
                 }
                 break;
-#endif
+#endif  // M5PM1_HAS_I2C_BUS
+#if !M5PM1_HAS_I2C_MASTER && !M5PM1_HAS_I2C_BUS
+            case M5PM1_I2C_DRIVER_LEGACY: {
+                i2c_config_t conf     = {};
+                conf.mode             = I2C_MODE_MASTER;
+                conf.sda_io_num       = _sda;
+                conf.scl_io_num       = _scl;
+                conf.sda_pullup_en    = GPIO_PULLUP_ENABLE;
+                conf.scl_pullup_en    = GPIO_PULLUP_ENABLE;
+                conf.master.clk_speed = originalFreq;
+                conf.clk_flags        = 0;
+                i2c_param_config(_port, &conf);  // best effort rollback
+                break;
+            }
+#endif  // !M5PM1_HAS_I2C_MASTER && !M5PM1_HAS_I2C_BUS
             default:
                 break;
         }
@@ -4502,16 +4713,22 @@ bool M5PM1::isAutoWakeEnabled() const
 m5pm1_err_t M5PM1::sendWakeSignal()
 {
 #ifdef ARDUINO
-    M5PM1_I2C_SEND_WAKE(_wire, _addr);
+    M5PM1_I2C_ARDUINO_SEND_WAKE(_wire, _addr);
     return M5PM1_OK;
 #else
     switch (_i2cDriverType) {
+#if M5PM1_HAS_I2C_MASTER
         case M5PM1_I2C_DRIVER_SELF_CREATED:
         case M5PM1_I2C_DRIVER_MASTER:
             return M5PM1_I2C_MASTER_SEND_WAKE(_i2c_master_bus, _addr) == ESP_OK ? M5PM1_OK : M5PM1_ERR_I2C_COMM;
+#endif  // M5PM1_HAS_I2C_MASTER
 #if M5PM1_HAS_I2C_BUS
         case M5PM1_I2C_DRIVER_BUS:
-            return M5PM1_I2C_SEND_WAKE(_i2c_device, M5PM1_REG_HW_REV) == ESP_OK ? M5PM1_OK : M5PM1_ERR_I2C_COMM;
+            return M5PM1_I2C_BUS_SEND_WAKE(_i2c_device, M5PM1_REG_HW_REV) == ESP_OK ? M5PM1_OK : M5PM1_ERR_I2C_COMM;
+#endif
+#if !M5PM1_HAS_I2C_MASTER && !M5PM1_HAS_I2C_BUS
+        case M5PM1_I2C_DRIVER_LEGACY:
+            return M5PM1_I2C_LEGACY_SEND_WAKE(_port, _addr);
 #endif
         default:
             return M5PM1_ERR_INTERNAL;
@@ -4548,7 +4765,7 @@ m5pm1_err_t M5PM1::updateSnapshot()
 m5pm1_snapshot_verify_t M5PM1::verifySnapshot()
 {
     m5pm1_snapshot_verify_t result = {0};
-    result.consistent = true;
+    result.consistent              = true;
 
     if (!_initialized) {
         result.consistent = false;

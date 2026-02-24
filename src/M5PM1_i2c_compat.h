@@ -20,8 +20,8 @@
 // Arduino I2C Functions
 // ============================
 
-#ifndef M5PM1_I2C_READ_BYTE
-static inline bool M5PM1_I2C_READ_BYTE(TwoWire *wire, uint8_t addr, uint8_t reg, uint8_t *data)
+#ifndef M5PM1_I2C_ARDUINO_READ_BYTE
+static inline bool M5PM1_I2C_ARDUINO_READ_BYTE(TwoWire *wire, uint8_t addr, uint8_t reg, uint8_t *data)
 {
     wire->beginTransmission(addr);
     wire->write(reg);
@@ -36,8 +36,9 @@ static inline bool M5PM1_I2C_READ_BYTE(TwoWire *wire, uint8_t addr, uint8_t reg,
 }
 #endif
 
-#ifndef M5PM1_I2C_READ_BYTES
-static inline bool M5PM1_I2C_READ_BYTES(TwoWire *wire, uint8_t addr, uint8_t start_reg, size_t len, uint8_t *data)
+#ifndef M5PM1_I2C_ARDUINO_READ_BYTES
+static inline bool M5PM1_I2C_ARDUINO_READ_BYTES(TwoWire *wire, uint8_t addr, uint8_t start_reg, size_t len,
+                                                uint8_t *data)
 {
     wire->beginTransmission(addr);
     wire->write(start_reg);
@@ -54,11 +55,11 @@ static inline bool M5PM1_I2C_READ_BYTES(TwoWire *wire, uint8_t addr, uint8_t sta
 }
 #endif
 
-#ifndef M5PM1_I2C_READ_REG16
-static inline bool M5PM1_I2C_READ_REG16(TwoWire *wire, uint8_t addr, uint8_t reg, uint16_t *data)
+#ifndef M5PM1_I2C_ARDUINO_READ_REG16
+static inline bool M5PM1_I2C_ARDUINO_READ_REG16(TwoWire *wire, uint8_t addr, uint8_t reg, uint16_t *data)
 {
     uint8_t buf[2];
-    if (!M5PM1_I2C_READ_BYTES(wire, addr, reg, 2, buf)) {
+    if (!M5PM1_I2C_ARDUINO_READ_BYTES(wire, addr, reg, 2, buf)) {
         return false;
     }
     // 小端模式：低字节在前
@@ -68,8 +69,8 @@ static inline bool M5PM1_I2C_READ_REG16(TwoWire *wire, uint8_t addr, uint8_t reg
 }
 #endif
 
-#ifndef M5PM1_I2C_WRITE_BYTE
-static inline bool M5PM1_I2C_WRITE_BYTE(TwoWire *wire, uint8_t addr, uint8_t reg, uint8_t data)
+#ifndef M5PM1_I2C_ARDUINO_WRITE_BYTE
+static inline bool M5PM1_I2C_ARDUINO_WRITE_BYTE(TwoWire *wire, uint8_t addr, uint8_t reg, uint8_t data)
 {
     wire->beginTransmission(addr);
     wire->write(reg);
@@ -81,9 +82,9 @@ static inline bool M5PM1_I2C_WRITE_BYTE(TwoWire *wire, uint8_t addr, uint8_t reg
 }
 #endif
 
-#ifndef M5PM1_I2C_WRITE_BYTES
-static inline bool M5PM1_I2C_WRITE_BYTES(TwoWire *wire, uint8_t addr, uint8_t start_reg, size_t len,
-                                         const uint8_t *data)
+#ifndef M5PM1_I2C_ARDUINO_WRITE_BYTES
+static inline bool M5PM1_I2C_ARDUINO_WRITE_BYTES(TwoWire *wire, uint8_t addr, uint8_t start_reg, size_t len,
+                                                 const uint8_t *data)
 {
     wire->beginTransmission(addr);
     wire->write(start_reg);
@@ -97,22 +98,22 @@ static inline bool M5PM1_I2C_WRITE_BYTES(TwoWire *wire, uint8_t addr, uint8_t st
 }
 #endif
 
-#ifndef M5PM1_I2C_WRITE_REG16
-static inline bool M5PM1_I2C_WRITE_REG16(TwoWire *wire, uint8_t addr, uint8_t reg, uint16_t data)
+#ifndef M5PM1_I2C_ARDUINO_WRITE_REG16
+static inline bool M5PM1_I2C_ARDUINO_WRITE_REG16(TwoWire *wire, uint8_t addr, uint8_t reg, uint16_t data)
 {
     uint8_t buf[2];
     // 小端模式：低字节在前
     // Little-endian: low byte first
     buf[0] = (uint8_t)(data & 0xFF);
     buf[1] = (uint8_t)((data >> 8) & 0xFF);
-    return M5PM1_I2C_WRITE_BYTES(wire, addr, reg, 2, buf);
+    return M5PM1_I2C_ARDUINO_WRITE_BYTES(wire, addr, reg, 2, buf);
 }
 #endif
 
 // PM1睡眠模式唤醒信号
 // Wake signal for PM1 sleep mode
-#ifndef M5PM1_I2C_SEND_WAKE
-static inline void M5PM1_I2C_SEND_WAKE(TwoWire *wire, uint8_t addr)
+#ifndef M5PM1_I2C_ARDUINO_SEND_WAKE
+static inline void M5PM1_I2C_ARDUINO_SEND_WAKE(TwoWire *wire, uint8_t addr)
 {
     // Send START signal to generate SDA falling edge for PM1 wake
     // PM1 uses SDA pin (PB4) falling edge to trigger EXTI4 interrupt for wakeup
@@ -166,25 +167,26 @@ static inline void M5PM1_I2C_SEND_WAKE(TwoWire *wire, uint8_t addr)
 //       BEFORE this header. Inclusion after this header cannot be detected here;
 //       in that case the user is responsible for ensuring no conflict (or enabling BACKWARD_CONFIG).
 #if __has_include(<i2c_bus.h>)
-  #if ESP_IDF_VERSION < ESP_IDF_VERSION_VAL(5, 3, 0)
-    #if defined(CONFIG_I2C_BUS_BACKWARD_CONFIG)
-      #define M5PM1_HAS_I2C_BUS 1  // IDF < 5.3.0 + BACKWARD_CONFIG：可用 / available
-    #else
-      #define M5PM1_HAS_I2C_BUS 0  // IDF < 5.3.0：默认 Legacy API / legacy API by default
-    #endif
-  #else
-    // IDF >= 5.3.0
-    #if defined(CONFIG_I2C_BUS_BACKWARD_CONFIG)
-      #define M5PM1_HAS_I2C_BUS 1  // BACKWARD_CONFIG：i2c_bus.h 使用 driver/i2c.h，无冲突 / no conflict
-    #elif defined(_DRIVER_I2C_H_)
-      #define M5PM1_HAS_I2C_BUS 0  // driver/i2c.h 已提前包含 + 无 BACKWARD_CONFIG → 冲突风险，禁用
-                                    // driver/i2c.h already included + no BACKWARD_CONFIG → conflict risk, disabled
-    #else
-      #define M5PM1_HAS_I2C_BUS 1  // driver/i2c.h 尚未包含，无冲突风险 / driver/i2c.h not yet included, no conflict
-    #endif
-  #endif
+#if ESP_IDF_VERSION < ESP_IDF_VERSION_VAL(5, 3, 0)
+#if defined(CONFIG_I2C_BUS_BACKWARD_CONFIG)
+#define M5PM1_HAS_I2C_BUS 1  // IDF < 5.3.0 + BACKWARD_CONFIG：可用 / available
 #else
-  #define M5PM1_HAS_I2C_BUS 0
+#define M5PM1_HAS_I2C_BUS 0  // IDF < 5.3.0：默认 Legacy API / legacy API by default
+#endif
+#else
+// IDF >= 5.3.0
+#if defined(CONFIG_I2C_BUS_BACKWARD_CONFIG)
+#define M5PM1_HAS_I2C_BUS 1  // BACKWARD_CONFIG：i2c_bus.h 使用 driver/i2c.h，无冲突 / no conflict
+#elif defined(_DRIVER_I2C_H_)
+#define M5PM1_HAS_I2C_BUS \
+    0  // driver/i2c.h 已提前包含 + 无 BACKWARD_CONFIG → 冲突风险，禁用
+       // driver/i2c.h already included + no BACKWARD_CONFIG → conflict risk, disabled
+#else
+#define M5PM1_HAS_I2C_BUS 1  // driver/i2c.h 尚未包含，无冲突风险 / driver/i2c.h not yet included, no conflict
+#endif
+#endif
+#else
+#define M5PM1_HAS_I2C_BUS 0
 #endif
 
 // 选择 I2C 驱动头文件
@@ -196,20 +198,26 @@ static inline void M5PM1_I2C_SEND_WAKE(TwoWire *wire, uint8_t addr)
 // ESP-IDF >= 5.3.0：优先使用新版 i2c_master 驱动
 // ESP-IDF >= 5.3.0: prefer the new i2c_master driver.
 #if ESP_IDF_VERSION < ESP_IDF_VERSION_VAL(5, 3, 0)
-  #include <driver/i2c.h>
+#include <driver/i2c.h>
 #elif __has_include(<driver/i2c_master.h>)
-  #include <driver/i2c_master.h>
+#include <driver/i2c_master.h>
 #else
-  #include <driver/i2c.h>
+#include <driver/i2c.h>
+#endif
+
+#if ESP_IDF_VERSION >= ESP_IDF_VERSION_VAL(5, 3, 0) && __has_include(<driver/i2c_master.h>)
+#define M5PM1_HAS_I2C_MASTER 1
+#else
+#define M5PM1_HAS_I2C_MASTER 0
 #endif
 
 #if M5PM1_HAS_I2C_BUS
-  #include <i2c_bus.h>
+#include <i2c_bus.h>
 #else
-  // i2c_bus 桩类型
-  // i2c_bus stub types
-  typedef void *i2c_bus_handle_t;
-  typedef void *i2c_bus_device_handle_t;
+// i2c_bus 桩类型
+// i2c_bus stub types
+typedef void *i2c_bus_handle_t;
+typedef void *i2c_bus_device_handle_t;
 #endif
 
 #ifdef __cplusplus
@@ -222,10 +230,16 @@ extern "C" {
 // ============================
 typedef enum {
     M5PM1_I2C_DRIVER_NONE = 0,      // 未初始化 / Not initialized
-    M5PM1_I2C_DRIVER_SELF_CREATED,  // 使用 i2c_port_t 自创建 / Self-created using i2c_port_t
-    M5PM1_I2C_DRIVER_MASTER,        // ESP-IDF 原生 i2c_master 驱动 / ESP-IDF native i2c_master driver
+    M5PM1_I2C_DRIVER_SELF_CREATED,  // 使用 i2c_port_t 自创建（IDF >= 5.3.0 用 i2c_master，否则用 Legacy）
+                                    // Self-created using i2c_port_t (i2c_master on IDF >= 5.3.0, Legacy otherwise)
+    M5PM1_I2C_DRIVER_MASTER,        // ESP-IDF 原生 i2c_master 驱动（仅 IDF >= 5.3.0）
+                                    // ESP-IDF native i2c_master driver (IDF >= 5.3.0 only)
 #if M5PM1_HAS_I2C_BUS
-    M5PM1_I2C_DRIVER_BUS            // esp-idf-lib i2c_bus 组件 / esp-idf-lib i2c_bus component
+    M5PM1_I2C_DRIVER_BUS,  // esp-idf-lib i2c_bus 组件 / esp-idf-lib i2c_bus component
+#endif
+#if !M5PM1_HAS_I2C_MASTER && !M5PM1_HAS_I2C_BUS
+    M5PM1_I2C_DRIVER_LEGACY,  // 传统 driver/i2c.h API（IDF < 5.3.0 且无 i2c_bus）
+                              // Legacy driver/i2c.h API (IDF < 5.3.0 without i2c_bus)
 #endif
 } m5pm1_i2c_driver_t;
 
@@ -236,22 +250,23 @@ typedef enum {
 
 #if M5PM1_HAS_I2C_BUS
 
-#ifndef M5PM1_I2C_READ_BYTE
-static inline esp_err_t M5PM1_I2C_READ_BYTE(i2c_bus_device_handle_t dev, uint8_t reg, uint8_t *data)
+#ifndef M5PM1_I2C_BUS_READ_BYTE
+static inline esp_err_t M5PM1_I2C_BUS_READ_BYTE(i2c_bus_device_handle_t dev, uint8_t reg, uint8_t *data)
 {
     return i2c_bus_read_byte(dev, reg, data);
 }
 #endif
 
-#ifndef M5PM1_I2C_READ_BYTES
-static inline esp_err_t M5PM1_I2C_READ_BYTES(i2c_bus_device_handle_t dev, uint8_t start_reg, size_t len, uint8_t *data)
+#ifndef M5PM1_I2C_BUS_READ_BYTES
+static inline esp_err_t M5PM1_I2C_BUS_READ_BYTES(i2c_bus_device_handle_t dev, uint8_t start_reg, size_t len,
+                                                 uint8_t *data)
 {
     return i2c_bus_read_bytes(dev, start_reg, len, data);
 }
 #endif
 
-#ifndef M5PM1_I2C_READ_REG16
-static inline esp_err_t M5PM1_I2C_READ_REG16(i2c_bus_device_handle_t dev, uint8_t reg, uint16_t *data)
+#ifndef M5PM1_I2C_BUS_READ_REG16
+static inline esp_err_t M5PM1_I2C_BUS_READ_REG16(i2c_bus_device_handle_t dev, uint8_t reg, uint16_t *data)
 {
     uint8_t buf[2];
     esp_err_t ret = i2c_bus_read_bytes(dev, reg, 2, buf);
@@ -264,23 +279,23 @@ static inline esp_err_t M5PM1_I2C_READ_REG16(i2c_bus_device_handle_t dev, uint8_
 }
 #endif
 
-#ifndef M5PM1_I2C_WRITE_BYTE
-static inline esp_err_t M5PM1_I2C_WRITE_BYTE(i2c_bus_device_handle_t dev, uint8_t reg, uint8_t data)
+#ifndef M5PM1_I2C_BUS_WRITE_BYTE
+static inline esp_err_t M5PM1_I2C_BUS_WRITE_BYTE(i2c_bus_device_handle_t dev, uint8_t reg, uint8_t data)
 {
     return i2c_bus_write_byte(dev, reg, data);
 }
 #endif
 
-#ifndef M5PM1_I2C_WRITE_BYTES
-static inline esp_err_t M5PM1_I2C_WRITE_BYTES(i2c_bus_device_handle_t dev, uint8_t start_reg, size_t len,
-                                              const uint8_t *data)
+#ifndef M5PM1_I2C_BUS_WRITE_BYTES
+static inline esp_err_t M5PM1_I2C_BUS_WRITE_BYTES(i2c_bus_device_handle_t dev, uint8_t start_reg, size_t len,
+                                                  const uint8_t *data)
 {
     return i2c_bus_write_bytes(dev, start_reg, len, (uint8_t *)data);
 }
 #endif
 
-#ifndef M5PM1_I2C_WRITE_REG16
-static inline esp_err_t M5PM1_I2C_WRITE_REG16(i2c_bus_device_handle_t dev, uint8_t reg, uint16_t data)
+#ifndef M5PM1_I2C_BUS_WRITE_REG16
+static inline esp_err_t M5PM1_I2C_BUS_WRITE_REG16(i2c_bus_device_handle_t dev, uint8_t reg, uint16_t data)
 {
     uint8_t buf[2];
     // 小端模式：低字节在前
@@ -293,8 +308,8 @@ static inline esp_err_t M5PM1_I2C_WRITE_REG16(i2c_bus_device_handle_t dev, uint8
 
 // PM1睡眠模式唤醒信号 (i2c_bus)
 // Wake signal for PM1 sleep mode (i2c_bus)
-#ifndef M5PM1_I2C_SEND_WAKE
-static inline esp_err_t M5PM1_I2C_SEND_WAKE(i2c_bus_device_handle_t dev, uint8_t reg)
+#ifndef M5PM1_I2C_BUS_SEND_WAKE
+static inline esp_err_t M5PM1_I2C_BUS_SEND_WAKE(i2c_bus_device_handle_t dev, uint8_t reg)
 {
     uint8_t dummy;
     return i2c_bus_read_byte(dev, reg, &dummy);
@@ -303,29 +318,99 @@ static inline esp_err_t M5PM1_I2C_SEND_WAKE(i2c_bus_device_handle_t dev, uint8_t
 
 #else  // !M5PM1_HAS_I2C_BUS
 
-// i2c_bus API 不可用时的编译期报错，可能原因：
-//   A) ESP-IDF < 5.3.0 且未启用 CONFIG_I2C_BUS_BACKWARD_CONFIG
-//   B) ESP-IDF >= 5.3.0 且未启用 CONFIG_I2C_BUS_BACKWARD_CONFIG，
-//      且 driver/i2c.h 已被其他组件在本头文件之前包含（检测到 _DRIVER_I2C_H_ 已定义），
-//      i2c_bus.h 自定义的 i2c_config_t 与其冲突。
-//
-// Compile-time error when i2c_bus API is unavailable. Possible reasons:
-//   A) ESP-IDF < 5.3.0 and CONFIG_I2C_BUS_BACKWARD_CONFIG is not enabled.
-//   B) ESP-IDF >= 5.3.0, CONFIG_I2C_BUS_BACKWARD_CONFIG is not enabled, and
-//      driver/i2c.h was already included by another component before this header
-//      (_DRIVER_I2C_H_ was defined), causing i2c_config_t conflict with i2c_bus.h.
-#if defined(__GNUC__) || defined(__clang__)
-void __attribute__((error(
-    "M5PM1: i2c_bus API is unavailable. "
-    "Reason A (ESP-IDF < 5.3.0): i2c_bus requires CONFIG_I2C_BUS_BACKWARD_CONFIG on this IDF version. "
-    "Reason B (ESP-IDF >= 5.3.0): driver/i2c.h was included before this header and "
-    "CONFIG_I2C_BUS_BACKWARD_CONFIG is not enabled, causing i2c_config_t conflict. "
-    "Fix 1: enable CONFIG_I2C_BUS_BACKWARD_CONFIG in menuconfig "
-    "(Component config -> i2c_bus -> Enable backward compatible config). "
-    "Fix 2: ensure no other component includes driver/i2c.h before M5PM1 headers (ESP-IDF >= 5.3.0 only). "
-    "Fix 3: use M5PM1_I2C_DRIVER_MASTER or M5PM1_I2C_DRIVER_SELF_CREATED instead."
-))) _m5pm1_i2c_bus_api_unavailable(void);
+// ============================
+// ESP-IDF I2C 函数 (Legacy - driver/i2c.h，仅 IDF < 5.3.0 且无 i2c_bus)
+// ESP-IDF I2C Functions (Legacy - driver/i2c.h, IDF < 5.3.0 without i2c_bus only)
+// 使用 IDF 4.3+ 引入的简单 API：i2c_master_write_to_device / i2c_master_write_read_device
+// Uses simple API introduced in IDF 4.3+: i2c_master_write_to_device / i2c_master_write_read_device
+// ============================
+
+#if !M5PM1_HAS_I2C_MASTER
+
+#include <freertos/FreeRTOS.h>
+#include <freertos/task.h>
+
+// 传统 I2C 超时，单位毫秒 / Legacy I2C timeout in milliseconds
+#ifndef M5PM1_I2C_LEGACY_TIMEOUT_MS
+#define M5PM1_I2C_LEGACY_TIMEOUT_MS 100
 #endif
+
+#ifndef M5PM1_I2C_LEGACY_READ_BYTE
+static inline esp_err_t M5PM1_I2C_LEGACY_READ_BYTE(i2c_port_t port, uint8_t addr, uint8_t reg, uint8_t *data)
+{
+    return i2c_master_write_read_device(port, addr, &reg, 1, data, 1, pdMS_TO_TICKS(M5PM1_I2C_LEGACY_TIMEOUT_MS));
+}
+#endif
+
+#ifndef M5PM1_I2C_LEGACY_READ_BYTES
+static inline esp_err_t M5PM1_I2C_LEGACY_READ_BYTES(i2c_port_t port, uint8_t addr, uint8_t start_reg, size_t len,
+                                                    uint8_t *data)
+{
+    return i2c_master_write_read_device(port, addr, &start_reg, 1, data, len,
+                                        pdMS_TO_TICKS(M5PM1_I2C_LEGACY_TIMEOUT_MS));
+}
+#endif
+
+#ifndef M5PM1_I2C_LEGACY_READ_REG16
+static inline esp_err_t M5PM1_I2C_LEGACY_READ_REG16(i2c_port_t port, uint8_t addr, uint8_t reg, uint16_t *data)
+{
+    uint8_t buf[2];
+    esp_err_t ret =
+        i2c_master_write_read_device(port, addr, &reg, 1, buf, 2, pdMS_TO_TICKS(M5PM1_I2C_LEGACY_TIMEOUT_MS));
+    if (ret == ESP_OK) {
+        *data = (uint16_t)buf[0] | ((uint16_t)buf[1] << 8);
+    }
+    return ret;
+}
+#endif
+
+#ifndef M5PM1_I2C_LEGACY_WRITE_BYTE
+static inline esp_err_t M5PM1_I2C_LEGACY_WRITE_BYTE(i2c_port_t port, uint8_t addr, uint8_t reg, uint8_t data)
+{
+    uint8_t buf[2] = {reg, data};
+    return i2c_master_write_to_device(port, addr, buf, 2, pdMS_TO_TICKS(M5PM1_I2C_LEGACY_TIMEOUT_MS));
+}
+#endif
+
+#ifndef M5PM1_I2C_LEGACY_WRITE_BYTES
+static inline esp_err_t M5PM1_I2C_LEGACY_WRITE_BYTES(i2c_port_t port, uint8_t addr, uint8_t start_reg, size_t len,
+                                                     const uint8_t *data)
+{
+    uint8_t *buf = (uint8_t *)malloc(len + 1);
+    if (buf == NULL) return ESP_ERR_NO_MEM;
+    buf[0] = start_reg;
+    memcpy(buf + 1, data, len);
+    esp_err_t ret = i2c_master_write_to_device(port, addr, buf, len + 1, pdMS_TO_TICKS(M5PM1_I2C_LEGACY_TIMEOUT_MS));
+    free(buf);
+    return ret;
+}
+#endif
+
+#ifndef M5PM1_I2C_LEGACY_WRITE_REG16
+static inline esp_err_t M5PM1_I2C_LEGACY_WRITE_REG16(i2c_port_t port, uint8_t addr, uint8_t reg, uint16_t data)
+{
+    uint8_t buf[3];
+    buf[0] = reg;
+    buf[1] = (uint8_t)(data & 0xFF);
+    buf[2] = (uint8_t)((data >> 8) & 0xFF);
+    return i2c_master_write_to_device(port, addr, buf, 3, pdMS_TO_TICKS(M5PM1_I2C_LEGACY_TIMEOUT_MS));
+}
+#endif
+
+// 唤醒信号发送 (Legacy) / Wake signal send (Legacy)
+#ifndef M5PM1_I2C_LEGACY_SEND_WAKE
+static inline esp_err_t M5PM1_I2C_LEGACY_SEND_WAKE(i2c_port_t port, uint8_t addr)
+{
+    uint8_t dummy = 0;
+    uint8_t reg   = 0x00;
+    // 忽略错误：唤醒时设备可能处于睡眠状态
+    // Ignore error: device may be asleep during wake
+    i2c_master_write_read_device(port, addr, &reg, 1, &dummy, 1, pdMS_TO_TICKS(10));
+    return ESP_OK;
+}
+#endif
+
+#endif  // !M5PM1_HAS_I2C_MASTER
 
 #endif  // M5PM1_HAS_I2C_BUS
 
