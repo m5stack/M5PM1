@@ -162,8 +162,10 @@ M5PM1::M5PM1()
     _i2cDriverType  = M5PM1_I2C_DRIVER_NONE;
     _i2c_master_bus = nullptr;
     _i2c_master_dev = nullptr;
+#if M5PM1_HAS_I2C_BUS
     _i2c_bus        = nullptr;
     _i2c_device     = nullptr;
+#endif
     _busExternal    = false;
     _sda            = -1;
     _scl            = -1;
@@ -194,12 +196,14 @@ M5PM1::~M5PM1()
             }
             break;
 
+#if M5PM1_HAS_I2C_BUS
         case M5PM1_I2C_DRIVER_BUS:
             if (_i2c_device) {
                 i2c_bus_device_delete(&_i2c_device);
                 _i2c_device = nullptr;
             }
             break;
+#endif
 
         default:
             break;
@@ -582,6 +586,7 @@ m5pm1_err_t M5PM1::begin(i2c_master_bus_handle_t bus, uint8_t addr, uint32_t spe
     return M5PM1_OK;
 }
 
+#if M5PM1_HAS_I2C_BUS
 m5pm1_err_t M5PM1::begin(i2c_bus_handle_t bus, uint8_t addr, uint32_t speed)
 {
     _addr          = addr;
@@ -685,6 +690,7 @@ m5pm1_err_t M5PM1::begin(i2c_bus_handle_t bus, uint8_t addr, uint32_t speed)
     M5PM1_LOG_I(TAG, "M5PM1 initialized at address 0x%02X (I2C: %lu Hz)", _addr, (unsigned long)_requestedSpeed);
     return M5PM1_OK;
 }
+#endif  // M5PM1_HAS_I2C_BUS
 
 #endif  // ARDUINO
 
@@ -1244,9 +1250,11 @@ bool M5PM1::_writeReg(uint8_t reg, uint8_t value)
             case M5PM1_I2C_DRIVER_MASTER:
                 success = M5PM1_I2C_MASTER_WRITE_BYTE(_i2c_master_dev, reg, value) == ESP_OK;
                 break;
+#if M5PM1_HAS_I2C_BUS
             case M5PM1_I2C_DRIVER_BUS:
                 success = M5PM1_I2C_WRITE_BYTE(_i2c_device, reg, value) == ESP_OK;
                 break;
+#endif
             default:
                 success = false;
                 break;
@@ -1276,9 +1284,11 @@ bool M5PM1::_writeReg16(uint8_t reg, uint16_t value)
             case M5PM1_I2C_DRIVER_MASTER:
                 success = M5PM1_I2C_MASTER_WRITE_REG16(_i2c_master_dev, reg, value) == ESP_OK;
                 break;
+#if M5PM1_HAS_I2C_BUS
             case M5PM1_I2C_DRIVER_BUS:
                 success = M5PM1_I2C_WRITE_REG16(_i2c_device, reg, value) == ESP_OK;
                 break;
+#endif
             default:
                 success = false;
                 break;
@@ -1308,9 +1318,11 @@ bool M5PM1::_readReg(uint8_t reg, uint8_t* value)
             case M5PM1_I2C_DRIVER_MASTER:
                 success = M5PM1_I2C_MASTER_READ_BYTE(_i2c_master_dev, reg, value) == ESP_OK;
                 break;
+#if M5PM1_HAS_I2C_BUS
             case M5PM1_I2C_DRIVER_BUS:
                 success = M5PM1_I2C_READ_BYTE(_i2c_device, reg, value) == ESP_OK;
                 break;
+#endif
             default:
                 success = false;
                 break;
@@ -1340,9 +1352,11 @@ bool M5PM1::_readReg16(uint8_t reg, uint16_t* value)
             case M5PM1_I2C_DRIVER_MASTER:
                 success = M5PM1_I2C_MASTER_READ_REG16(_i2c_master_dev, reg, value) == ESP_OK;
                 break;
+#if M5PM1_HAS_I2C_BUS
             case M5PM1_I2C_DRIVER_BUS:
                 success = M5PM1_I2C_READ_REG16(_i2c_device, reg, value) == ESP_OK;
                 break;
+#endif
             default:
                 success = false;
                 break;
@@ -1372,9 +1386,11 @@ bool M5PM1::_writeBytes(uint8_t reg, const uint8_t* data, uint8_t len)
             case M5PM1_I2C_DRIVER_MASTER:
                 success = M5PM1_I2C_MASTER_WRITE_BYTES(_i2c_master_dev, reg, len, data) == ESP_OK;
                 break;
+#if M5PM1_HAS_I2C_BUS
             case M5PM1_I2C_DRIVER_BUS:
                 success = M5PM1_I2C_WRITE_BYTES(_i2c_device, reg, len, data) == ESP_OK;
                 break;
+#endif
             default:
                 success = false;
                 break;
@@ -1404,9 +1420,11 @@ bool M5PM1::_readBytes(uint8_t reg, uint8_t* data, uint8_t len)
             case M5PM1_I2C_DRIVER_MASTER:
                 success = M5PM1_I2C_MASTER_READ_BYTES(_i2c_master_dev, reg, len, data) == ESP_OK;
                 break;
+#if M5PM1_HAS_I2C_BUS
             case M5PM1_I2C_DRIVER_BUS:
                 success = M5PM1_I2C_READ_BYTES(_i2c_device, reg, len, data) == ESP_OK;
                 break;
+#endif
             default:
                 success = false;
                 break;
@@ -4387,6 +4405,7 @@ m5pm1_err_t M5PM1::switchI2cSpeed(m5pm1_i2c_speed_t speed)
             }
             break;
         }
+#if M5PM1_HAS_I2C_BUS
         case M5PM1_I2C_DRIVER_BUS:
             if (_i2c_device != nullptr) {
                 ret = i2c_bus_device_delete(&_i2c_device);
@@ -4403,6 +4422,7 @@ m5pm1_err_t M5PM1::switchI2cSpeed(m5pm1_i2c_speed_t speed)
                 }
             }
             break;
+#endif
         default:
             M5PM1_LOG_E(TAG, "Unknown I2C driver type");
             return M5PM1_ERR_INTERNAL;
@@ -4435,12 +4455,14 @@ m5pm1_err_t M5PM1::switchI2cSpeed(m5pm1_i2c_speed_t speed)
                 }
                 break;
             }
+#if M5PM1_HAS_I2C_BUS
             case M5PM1_I2C_DRIVER_BUS:
                 if (_i2c_device != nullptr) {
                     i2c_bus_device_delete(&_i2c_device);
                     _i2c_device = i2c_bus_device_create(_i2c_bus, _addr, originalFreq);
                 }
                 break;
+#endif
             default:
                 break;
         }
@@ -4487,8 +4509,10 @@ m5pm1_err_t M5PM1::sendWakeSignal()
         case M5PM1_I2C_DRIVER_SELF_CREATED:
         case M5PM1_I2C_DRIVER_MASTER:
             return M5PM1_I2C_MASTER_SEND_WAKE(_i2c_master_bus, _addr) == ESP_OK ? M5PM1_OK : M5PM1_ERR_I2C_COMM;
+#if M5PM1_HAS_I2C_BUS
         case M5PM1_I2C_DRIVER_BUS:
             return M5PM1_I2C_SEND_WAKE(_i2c_device, M5PM1_REG_HW_REV) == ESP_OK ? M5PM1_OK : M5PM1_ERR_I2C_COMM;
+#endif
         default:
             return M5PM1_ERR_INTERNAL;
     }

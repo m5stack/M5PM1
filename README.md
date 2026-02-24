@@ -22,6 +22,28 @@ M5PM1 is a dual-platform (ESP-IDF & Arduino) driver library for M5Stack PM1 Powe
 - examples/neopixel/neopixel.ino
 - examples/usb_interrupt_sleep/usb_interrupt_sleep.ino
 
+## Notes
+
+### Include Order (ESP-IDF)
+
+If used alongside `M5Unified`, include it **before** `M5PM1`:
+
+```cpp
+#include <M5Unified.h>   // ✓ must come first
+#include <M5PM1.h>
+```
+
+```cpp
+#include <M5PM1.h>       // ✗ causes i2c_config_t conflict
+#include <M5Unified.h>
+```
+
+> **Why:** On ESP-IDF ≥ 5.3.0 without `CONFIG_I2C_BUS_BACKWARD_CONFIG`, `i2c_bus.h` defines
+> its own `i2c_config_t`. Including it before `M5Unified` (which pulls in `driver/i2c.h`)
+> creates a conflicting declaration error. Reversing the order avoids this.
+>
+> Alternatively, enable `CONFIG_I2C_BUS_BACKWARD_CONFIG` in menuconfig to remove the restriction.
+
 ## License
 
 - [M5PM1 - MIT](LICENSE)

@@ -1061,6 +1061,7 @@ public:
     m5pm1_err_t begin(i2c_master_bus_handle_t bus, uint8_t addr = M5PM1_DEFAULT_ADDR,
                       uint32_t speed = M5PM1_I2C_FREQ_100K);
 
+#if M5PM1_HAS_I2C_BUS
     /**
      * @brief Initialize with existing i2c_bus handle (esp-idf-lib)
      * @param bus Existing i2c_bus_handle_t
@@ -1070,6 +1071,23 @@ public:
      *         Return M5PM1_OK on success, error code otherwise
      */
     m5pm1_err_t begin(i2c_bus_handle_t bus, uint8_t addr = M5PM1_DEFAULT_ADDR, uint32_t speed = M5PM1_I2C_FREQ_100K);
+#else
+        /**
+         * @brief i2c_bus overload is intentionally kept for diagnostics when unavailable
+         * @note This overload exists only to provide a clear compile-time message when called.
+         */
+        inline m5pm1_err_t begin(i2c_bus_handle_t bus, uint8_t addr = M5PM1_DEFAULT_ADDR,
+                                                         uint32_t speed = M5PM1_I2C_FREQ_100K)
+        {
+                (void)bus;
+                (void)addr;
+                (void)speed;
+#if defined(__GNUC__) || defined(__clang__)
+                _m5pm1_i2c_bus_api_unavailable();
+#endif
+                return M5PM1_ERR_NOT_SUPPORTED;
+        }
+#endif
 #endif
 
     /**
@@ -2870,8 +2888,10 @@ private:
     // I2C handles
     i2c_master_bus_handle_t _i2c_master_bus;
     i2c_master_dev_handle_t _i2c_master_dev;
+#if M5PM1_HAS_I2C_BUS
     i2c_bus_handle_t _i2c_bus;
     i2c_bus_device_handle_t _i2c_device;
+#endif
 
     // I2C 管理标志
     // I2C management flags

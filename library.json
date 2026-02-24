@@ -1,6 +1,6 @@
 {
   "name": "M5PM1",
-  "version": "1.0.4",
+  "version": "1.0.5",
   "description": "M5Stack PM1 Power Management IC Driver Library",
   "keywords": [
     "m5stack",
