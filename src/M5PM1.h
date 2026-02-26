@@ -1089,6 +1089,22 @@ public:
         return M5PM1_ERR_NOT_SUPPORTED;
     }
 #endif
+
+#if M5PM1_HAS_M5UNIFIED_I2C
+    /**
+     * @brief Initialize with M5Unified I2C_Class instance (ESP-IDF)
+     * @note  The I2C bus must already be initialized (i2c->begin() called) by the caller.
+     *        M5PM1 borrows the I2C_Class; caller retains ownership and lifecycle.
+     *        不负责驱动安装或释放，I2C 由调用方全程管理。
+     * @param i2c   已 begin() 的 m5::I2C_Class 指针
+     *              Pointer to an already begin()-ed m5::I2C_Class
+     * @param addr  I2C 地址 / I2C address (default 0x6E)
+     * @param speed I2C 速率（Hz，100000 或 400000）/ I2C speed in Hz (100000 or 400000)
+     * @return M5PM1_OK on success, error code otherwise
+     */
+    m5pm1_err_t begin(m5::I2C_Class* i2c, uint8_t addr = M5PM1_DEFAULT_ADDR, uint32_t speed = M5PM1_I2C_FREQ_DEFAULT);
+#endif  // M5PM1_HAS_M5UNIFIED_I2C
+
 #endif
 
     /**
@@ -2909,6 +2925,14 @@ private:
     int _sda;
     int _scl;
     i2c_port_t _port;
+
+    // M5Unified I2C_Class 借用句柄及当前通信频率
+    // Borrowed M5Unified I2C_Class handle and current communication frequency
+#if M5PM1_HAS_M5UNIFIED_I2C
+    m5::I2C_Class* _m5_i2c;
+    uint32_t _commFreq;  // M5UNIFIED 路径专用：init 时从 100K 起，完成后切换至 _requestedSpeed
+                         // M5UNIFIED path: starts at 100K during init, switches to _requestedSpeed after
+#endif
 #endif
 
     // 内部辅助函数

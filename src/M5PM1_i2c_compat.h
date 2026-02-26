@@ -177,10 +177,10 @@ static inline void M5PM1_I2C_ARDUINO_SEND_WAKE(TwoWire *wire, uint8_t addr)
 // IDF >= 5.3.0
 #if defined(CONFIG_I2C_BUS_BACKWARD_CONFIG)
 #define M5PM1_HAS_I2C_BUS 1  // BACKWARD_CONFIG：i2c_bus.h 使用 driver/i2c.h，无冲突 / no conflict
-#elif defined(_DRIVER_I2C_H_)
+#elif defined(_DRIVER_I2C_H_) || (defined(__cplusplus) && __has_include(<utility/I2C_Class.hpp>))
 #define M5PM1_HAS_I2C_BUS \
-    0  // driver/i2c.h 已提前包含 + 无 BACKWARD_CONFIG → 冲突风险，禁用
-       // driver/i2c.h already included + no BACKWARD_CONFIG → conflict risk, disabled
+    0  // driver/i2c.h 已包含或 M5Unified 可用（将包含 driver/i2c.h）→ i2c_config_t 冲突风险，禁用
+       // driver/i2c.h already included or M5Unified available (will include driver/i2c.h) → conflict risk, disabled
 #else
 #define M5PM1_HAS_I2C_BUS 1  // driver/i2c.h 尚未包含，无冲突风险 / driver/i2c.h not yet included, no conflict
 #endif
@@ -211,6 +211,10 @@ static inline void M5PM1_I2C_ARDUINO_SEND_WAKE(TwoWire *wire, uint8_t addr)
 #define M5PM1_HAS_I2C_MASTER 0
 #endif
 
+// ============================
+// M5Unified I2C_Class 检测
+// M5Unified I2C_Class Detection
+// ============================
 #if M5PM1_HAS_I2C_BUS
 #include <i2c_bus.h>
 #else
@@ -218,6 +222,20 @@ static inline void M5PM1_I2C_ARDUINO_SEND_WAKE(TwoWire *wire, uint8_t addr)
 // i2c_bus stub types
 typedef void *i2c_bus_handle_t;
 typedef void *i2c_bus_device_handle_t;
+#endif
+
+//
+// 仅 C++ 环境下检测 M5Unified 的 I2C_Class 是否可用。
+// Detects whether M5Unified's I2C_Class is available (C++ only).
+// 启用条件：__cplusplus 已定义（即编译单元为 C++）且 utility/I2C_Class.hpp 可被 include。
+// Enabled when: __cplusplus is defined (i.e., C++ TU) AND utility/I2C_Class.hpp is reachable.
+// 注意：i2c_bus.h 必须先于 I2C_Class.hpp 包含，避免 i2c_config_t typedef 冲突。
+// Note: i2c_bus.h must be included before I2C_Class.hpp to avoid i2c_config_t typedef conflict.
+#if defined(__cplusplus) && __has_include(<utility/I2C_Class.hpp>)
+#define M5PM1_HAS_M5UNIFIED_I2C 1
+#include <utility/I2C_Class.hpp>
+#else
+#define M5PM1_HAS_M5UNIFIED_I2C 0
 #endif
 
 #ifdef __cplusplus
@@ -240,6 +258,10 @@ typedef enum {
 #if !M5PM1_HAS_I2C_MASTER && !M5PM1_HAS_I2C_BUS
     M5PM1_I2C_DRIVER_LEGACY,  // 传统 driver/i2c.h API（IDF < 5.3.0 且无 i2c_bus）
                               // Legacy driver/i2c.h API (IDF < 5.3.0 without i2c_bus)
+#endif
+#if M5PM1_HAS_M5UNIFIED_I2C
+    M5PM1_I2C_DRIVER_M5UNIFIED,  // 借用 M5Unified I2C_Class 通信（不负责驱动安装/释放）
+                                 // Borrow M5Unified I2C_Class for communication (no driver lifecycle)
 #endif
 } m5pm1_i2c_driver_t;
 
@@ -503,6 +525,84 @@ static inline esp_err_t M5PM1_I2C_MASTER_SEND_WAKE(i2c_master_bus_handle_t bus, 
 #ifdef __cplusplus
 }
 #endif
+
+// ============================
+// M5Unified I2C_Class 通信封装
+// M5Unified I2C_Class Communication Wrappers
+// (C++ only — m5::I2C_Class is a C++ class)
+// ============================
+#if M5PM1_HAS_M5UNIFIED_I2C
+#ifdef __cplusplus
+
+#ifndef M5PM1_M5UNIFIED_READ_BYTE
+static inline bool M5PM1_M5UNIFIED_READ_BYTE(m5::I2C_Class *i2c, uint8_t addr, uint8_t reg, uint8_t *data,
+                                             uint32_t freq)
+{
+    return i2c->readRegister(addr, reg, data, 1, freq);
+}
+#endif
+
+#ifndef M5PM1_M5UNIFIED_READ_BYTES
+static inline bool M5PM1_M5UNIFIED_READ_BYTES(m5::I2C_Class *i2c, uint8_t addr, uint8_t reg, size_t len, uint8_t *data,
+                                              uint32_t freq)
+{
+    return i2c->readRegister(addr, reg, data, len, freq);
+}
+#endif
+
+#ifndef M5PM1_M5UNIFIED_READ_REG16
+static inline bool M5PM1_M5UNIFIED_READ_REG16(m5::I2C_Class *i2c, uint8_t addr, uint8_t reg, uint16_t *data,
+                                              uint32_t freq)
+{
+    uint8_t buf[2];
+    if (!i2c->readRegister(addr, reg, buf, 2, freq)) return false;
+    // 小端模式：低字节在前 / Little-endian: low byte first
+    *data = (uint16_t)buf[0] | ((uint16_t)buf[1] << 8);
+    return true;
+}
+#endif
+
+#ifndef M5PM1_M5UNIFIED_WRITE_BYTE
+static inline bool M5PM1_M5UNIFIED_WRITE_BYTE(m5::I2C_Class *i2c, uint8_t addr, uint8_t reg, uint8_t data,
+                                              uint32_t freq)
+{
+    return i2c->writeRegister8(addr, reg, data, freq);
+}
+#endif
+
+#ifndef M5PM1_M5UNIFIED_WRITE_BYTES
+static inline bool M5PM1_M5UNIFIED_WRITE_BYTES(m5::I2C_Class *i2c, uint8_t addr, uint8_t reg, size_t len,
+                                               const uint8_t *data, uint32_t freq)
+{
+    return i2c->writeRegister(addr, reg, data, len, freq);
+}
+#endif
+
+#ifndef M5PM1_M5UNIFIED_WRITE_REG16
+static inline bool M5PM1_M5UNIFIED_WRITE_REG16(m5::I2C_Class *i2c, uint8_t addr, uint8_t reg, uint16_t data,
+                                               uint32_t freq)
+{
+    uint8_t buf[2];
+    // 小端模式：低字节在前 / Little-endian: low byte first
+    buf[0] = (uint8_t)(data & 0xFF);
+    buf[1] = (uint8_t)((data >> 8) & 0xFF);
+    return i2c->writeRegister(addr, reg, buf, 2, freq);
+}
+#endif
+
+#ifndef M5PM1_M5UNIFIED_SEND_WAKE
+// 产生 I2C START 信号以唤醒处于睡眠的 PM1
+// Generate I2C START signal to wake PM1 from sleep
+static inline bool M5PM1_M5UNIFIED_SEND_WAKE(m5::I2C_Class *i2c, uint8_t addr, uint32_t freq)
+{
+    i2c->start(addr, false, freq);
+    i2c->stop();
+    return true;
+}
+#endif
+
+#endif  // __cplusplus
+#endif  // M5PM1_HAS_M5UNIFIED_I2C
 
 #endif  // ARDUINO
 

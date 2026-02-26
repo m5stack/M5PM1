@@ -172,6 +172,10 @@ M5PM1::M5PM1()
     _sda         = -1;
     _scl         = -1;
     _port        = I2C_NUM_0;
+#if M5PM1_HAS_M5UNIFIED_I2C
+    _m5_i2c   = nullptr;
+    _commFreq = M5PM1_I2C_FREQ_100K;
+#endif
 #endif
 }
 
@@ -824,6 +828,84 @@ m5pm1_err_t M5PM1::begin(i2c_bus_handle_t bus, uint8_t addr, uint32_t speed)
 }
 #endif  // M5PM1_HAS_I2C_BUS
 
+#if M5PM1_HAS_M5UNIFIED_I2C
+m5pm1_err_t M5PM1::begin(m5::I2C_Class* i2c, uint8_t addr, uint32_t speed)
+{
+    if (i2c == nullptr || !i2c->isEnabled()) {
+        M5PM1_LOG_E(TAG, "M5Unified I2C_Class is null or not initialized");
+        return M5PM1_ERR_I2C_CONFIG;
+    }
+
+    _addr          = addr;
+    _m5_i2c        = i2c;
+    _busExternal   = true;
+    _i2cDriverType = M5PM1_I2C_DRIVER_M5UNIFIED;
+
+    // 步骤1：校验用户频率并记录
+    // Step 1: Validate requested speed
+    if (!_isValidI2cFrequency(speed)) {
+        M5PM1_LOG_W(TAG, "Invalid I2C frequency: %lu Hz. Falling back to 100KHz.", (unsigned long)speed);
+        _requestedSpeed = M5PM1_I2C_FREQ_100K;
+    } else {
+        _requestedSpeed = speed;
+    }
+
+    // 步骤2：以 100KHz 发送唤醒信号
+    // Step 2: Send wake signal at 100KHz
+    _commFreq = M5PM1_I2C_FREQ_100K;
+    M5PM1_M5UNIFIED_SEND_WAKE(_m5_i2c, _addr, _commFreq);
+    M5PM1_DELAY_MS(10);
+
+    // 步骤3：验证设备通信（失败则等待 800ms 重试一次）
+    // Step 3: Verify device communication (retry once after 800ms)
+    if (!_initDevice()) {
+        M5PM1_LOG_W(TAG, "Device init failed, retrying after 800ms...");
+        M5PM1_DELAY_MS(800);
+        M5PM1_M5UNIFIED_SEND_WAKE(_m5_i2c, _addr, _commFreq);
+        M5PM1_DELAY_MS(10);
+        if (!_initDevice()) {
+            // 100K 再次失败，尝试 400K
+            // 100K failed again, try 400K
+            M5PM1_LOG_W(TAG, "Device init failed at 100KHz (retry), trying 400KHz...");
+            _commFreq = M5PM1_I2C_FREQ_400K;
+            M5PM1_M5UNIFIED_SEND_WAKE(_m5_i2c, _addr, _commFreq);
+            M5PM1_DELAY_MS(10);
+            if (!_initDevice()) {
+                M5PM1_LOG_E(TAG, "Failed at 100KHz (twice) and 400KHz");
+                _i2cDriverType = M5PM1_I2C_DRIVER_NONE;
+                _m5_i2c        = nullptr;
+                return M5PM1_ERR_I2C_COMM;
+            }
+        }
+    }
+    _initialized = true;
+
+    // 步骤4：配置设备 I2C 参数（关闭睡眠 + 目标频率）
+    // Step 4: Configure device I2C (disable sleep + target speed)
+    m5pm1_i2c_speed_t targetSpeed =
+        (_requestedSpeed == M5PM1_I2C_FREQ_400K) ? M5PM1_I2C_SPEED_400K : M5PM1_I2C_SPEED_100K;
+    if (setI2cConfig(0, targetSpeed) != M5PM1_OK) {
+        M5PM1_LOG_W(TAG, "Failed to set I2C config");
+    }
+
+    // 步骤5：切换通信频率到目标亟（M5Unified 无需重装驱动，直接更新 _commFreq）
+    // Step 5: Switch to target frequency (no driver reinstall needed; update _commFreq only)
+    _commFreq = _requestedSpeed;
+
+    // 步骤6：刷新快照并完成初始化
+    // Step 6: Refresh snapshot and finish initialization
+    _lastCommTime = M5PM1_GET_TIME_MS();
+    if (!_snapshotAll()) {
+        _clearAll();
+    }
+
+    _initialized = true;
+    M5PM1_LOG_I(TAG, "M5PM1 initialized via M5Unified I2C at address 0x%02X (%lu Hz)", _addr,
+                (unsigned long)_requestedSpeed);
+    return M5PM1_OK;
+}
+#endif  // M5PM1_HAS_M5UNIFIED_I2C
+
 #endif  // ARDUINO
 
 // ============================
@@ -1394,6 +1476,11 @@ bool M5PM1::_writeReg(uint8_t reg, uint8_t value)
                 success = M5PM1_I2C_LEGACY_WRITE_BYTE(_port, _addr, reg, value) == ESP_OK;
                 break;
 #endif
+#if M5PM1_HAS_M5UNIFIED_I2C
+            case M5PM1_I2C_DRIVER_M5UNIFIED:
+                success = M5PM1_M5UNIFIED_WRITE_BYTE(_m5_i2c, _addr, reg, value, _commFreq);
+                break;
+#endif
             default:
                 success = false;
                 break;
@@ -1433,6 +1520,11 @@ bool M5PM1::_writeReg16(uint8_t reg, uint16_t value)
 #if !M5PM1_HAS_I2C_MASTER && !M5PM1_HAS_I2C_BUS
             case M5PM1_I2C_DRIVER_LEGACY:
                 success = M5PM1_I2C_LEGACY_WRITE_REG16(_port, _addr, reg, value) == ESP_OK;
+                break;
+#endif
+#if M5PM1_HAS_M5UNIFIED_I2C
+            case M5PM1_I2C_DRIVER_M5UNIFIED:
+                success = M5PM1_M5UNIFIED_WRITE_REG16(_m5_i2c, _addr, reg, value, _commFreq);
                 break;
 #endif
             default:
@@ -1476,6 +1568,11 @@ bool M5PM1::_readReg(uint8_t reg, uint8_t* value)
                 success = M5PM1_I2C_LEGACY_READ_BYTE(_port, _addr, reg, value) == ESP_OK;
                 break;
 #endif
+#if M5PM1_HAS_M5UNIFIED_I2C
+            case M5PM1_I2C_DRIVER_M5UNIFIED:
+                success = M5PM1_M5UNIFIED_READ_BYTE(_m5_i2c, _addr, reg, value, _commFreq);
+                break;
+#endif
             default:
                 success = false;
                 break;
@@ -1515,6 +1612,11 @@ bool M5PM1::_readReg16(uint8_t reg, uint16_t* value)
 #if !M5PM1_HAS_I2C_MASTER && !M5PM1_HAS_I2C_BUS
             case M5PM1_I2C_DRIVER_LEGACY:
                 success = M5PM1_I2C_LEGACY_READ_REG16(_port, _addr, reg, value) == ESP_OK;
+                break;
+#endif
+#if M5PM1_HAS_M5UNIFIED_I2C
+            case M5PM1_I2C_DRIVER_M5UNIFIED:
+                success = M5PM1_M5UNIFIED_READ_REG16(_m5_i2c, _addr, reg, value, _commFreq);
                 break;
 #endif
             default:
@@ -1558,6 +1660,11 @@ bool M5PM1::_writeBytes(uint8_t reg, const uint8_t* data, uint8_t len)
                 success = M5PM1_I2C_LEGACY_WRITE_BYTES(_port, _addr, reg, len, data) == ESP_OK;
                 break;
 #endif
+#if M5PM1_HAS_M5UNIFIED_I2C
+            case M5PM1_I2C_DRIVER_M5UNIFIED:
+                success = M5PM1_M5UNIFIED_WRITE_BYTES(_m5_i2c, _addr, reg, len, data, _commFreq);
+                break;
+#endif
             default:
                 success = false;
                 break;
@@ -1597,6 +1704,11 @@ bool M5PM1::_readBytes(uint8_t reg, uint8_t* data, uint8_t len)
 #if !M5PM1_HAS_I2C_MASTER && !M5PM1_HAS_I2C_BUS
             case M5PM1_I2C_DRIVER_LEGACY:
                 success = M5PM1_I2C_LEGACY_READ_BYTES(_port, _addr, reg, len, data) == ESP_OK;
+                break;
+#endif
+#if M5PM1_HAS_M5UNIFIED_I2C
+            case M5PM1_I2C_DRIVER_M5UNIFIED:
+                success = M5PM1_M5UNIFIED_READ_BYTES(_m5_i2c, _addr, reg, len, data, _commFreq);
                 break;
 #endif
             default:
@@ -2392,7 +2504,7 @@ m5pm1_err_t M5PM1::boostSetPowerHold(bool enable)
     if (!_readReg(M5PM1_REG_HOLD_CFG, &regVal)) return M5PM1_ERR_I2C_COMM;
 
     if (enable) {
-        regVal |= (1 << 6);  // DCDC bit
+        regVal |= (1 << 6);  // BOOST bit
     } else {
         regVal &= ~(1 << 6);
     }
@@ -2767,9 +2879,11 @@ m5pm1_err_t M5PM1::setPwmConfig(m5pm1_pwm_channel_t channel, bool enable, bool p
         }
     }
 
-    m5pm1_err_t err = setPwmDuty12bit(channel, duty12, polarity, enable);
+    // 先设频率再设 duty，避免频率设置失败时 duty 已以旧频率写入
+    // Set frequency first, then duty, to avoid duty being written with old frequency if frequency fails
+    m5pm1_err_t err = setPwmFrequency(frequency);
     if (err != M5PM1_OK) return err;
-    return setPwmFrequency(frequency);
+    return setPwmDuty12bit(channel, duty12, polarity, enable);
 }
 
 m5pm1_err_t M5PM1::analogWrite(m5pm1_pwm_channel_t channel, uint8_t value)
@@ -4157,8 +4271,9 @@ m5pm1_err_t M5PM1::setAw8737aPulse(m5pm1_gpio_num_t pin, m5pm1_aw8737a_pulse_t n
 
     // 检查引脚是否为输出模式，如果不是则自动配置为推挽输出
     // Check if pin is output mode, if not auto-configure as push-pull output
-    if (_pinStatus[pin].mode != M5PM1_GPIO_MODE_OUTPUT) {
-        M5PM1_LOG_I(TAG, "AW8737A: Pin %d not output mode, auto-configuring as push-pull output", pin);
+    if (!_cacheValid || _pinStatus[pin].mode != M5PM1_GPIO_MODE_OUTPUT) {
+        M5PM1_LOG_I(TAG, "AW8737A: Pin %d not output mode (or cache invalid), auto-configuring as push-pull output",
+                    pin);
         pinMode(pin, OUTPUT);
     }
 
@@ -4228,8 +4343,9 @@ m5pm1_err_t M5PM1::refreshAw8737aPulse()
 
     // 检查引脚是否为输出模式，如果不是则自动配置为推挽输出
     // Check if pin is output mode, if not auto-configure as push-pull output
-    if (_pinStatus[_aw8737aPin].mode != M5PM1_GPIO_MODE_OUTPUT) {
-        M5PM1_LOG_I(TAG, "AW8737A: Pin %d not output mode, auto-configuring as push-pull output", _aw8737aPin);
+    if (!_cacheValid || _pinStatus[_aw8737aPin].mode != M5PM1_GPIO_MODE_OUTPUT) {
+        M5PM1_LOG_I(TAG, "AW8737A: Pin %d not output mode (or cache invalid), auto-configuring as push-pull output",
+                    _aw8737aPin);
         pinMode(_aw8737aPin, OUTPUT);
     }
 
@@ -4730,6 +4846,10 @@ m5pm1_err_t M5PM1::sendWakeSignal()
         case M5PM1_I2C_DRIVER_LEGACY:
             return M5PM1_I2C_LEGACY_SEND_WAKE(_port, _addr);
 #endif
+#if M5PM1_HAS_M5UNIFIED_I2C
+        case M5PM1_I2C_DRIVER_M5UNIFIED:
+            return M5PM1_M5UNIFIED_SEND_WAKE(_m5_i2c, _addr, _commFreq) ? M5PM1_OK : M5PM1_ERR_I2C_COMM;
+#endif
         default:
             return M5PM1_ERR_INTERNAL;
     }
@@ -4764,7 +4884,7 @@ m5pm1_err_t M5PM1::updateSnapshot()
 
 m5pm1_snapshot_verify_t M5PM1::verifySnapshot()
 {
-    m5pm1_snapshot_verify_t result = {0};
+    m5pm1_snapshot_verify_t result = {};
     result.consistent              = true;
 
     if (!_initialized) {
@@ -4844,7 +4964,9 @@ m5pm1_snapshot_verify_t M5PM1::verifySnapshot()
             uint8_t actualChannel = (ctrl >> 1) & 0x07;
             bool actualBusy       = (ctrl & 0x01) != 0;
 
-            if (actualChannel != _adcState.channel || actualBusy != _adcState.busy || value != _adcState.lastValue) {
+            // 仅比较 channel 和 busy 状态，不比较 lastValue（ADC 活跃时值持续变化会导致误报）
+            // Only compare channel and busy status, not lastValue (active ADC causes false positives)
+            if (actualChannel != _adcState.channel || actualBusy != _adcState.busy) {
                 result.adc_mismatch = true;
                 result.consistent   = false;
             }
