@@ -87,7 +87,7 @@ typedef enum {
 // I2C 重试参数
 // I2C retry settings
 #define M5PM1_I2C_RETRY_COUNT    2
-#define M5PM1_I2C_RETRY_DELAY_MS 2
+#define M5PM1_I2C_RETRY_DELAY_MS 50
 
 // ============================
 // 寄存器地址
