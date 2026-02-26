@@ -44,6 +44,10 @@ If used alongside `M5Unified`, include it **before** `M5PM1`:
 >
 > Alternatively, enable `CONFIG_I2C_BUS_BACKWARD_CONFIG` in menuconfig to remove the restriction.
 
+### i2c_bus mode is not supported when M5GFX / M5Unified is present
+
+Use `begin(&M5.In_I2C, addr, freq)` instead — M5GFX already owns the I2C bus and the two drivers cannot share it.
+
 ## License
 
 - [M5PM1 - MIT](LICENSE)

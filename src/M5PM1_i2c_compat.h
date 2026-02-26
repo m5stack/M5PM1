@@ -142,9 +142,16 @@ static inline void M5PM1_I2C_ARDUINO_SEND_WAKE(TwoWire *wire, uint8_t addr)
 //     → i2c_bus.h 内部回退到 driver/i2c.h，可安全使用
 //
 // ESP-IDF >= 5.3.0
-//   启用  BACKWARD_CONFIG
-//     → i2c_bus.h 内部使用 driver/i2c.h，无冲突风险
-//   未启用 BACKWARD_CONFIG
+//   [最优先] 检测到 M5GFX 或 M5Unified 存在于项目中
+//     → i2c_bus 模式无论 BACKWARD_CONFIG 是否启用均不可用，编译报错：
+//       · BACKWARD_CONFIG=y：i2c_bus.c 使用旧驱动 i2c_driver_install()，
+//                             与 M5GFX 的 i2c_new_master_bus()（driver_ng）冲突 → 运行时 abort()
+//       · BACKWARD_CONFIG=n：i2c_bus_v2.c 也使用 i2c_new_master_bus()，
+//                             与 M5GFX 争抢同一端口句柄 → 行为未定义
+//     解决方法：改用 pm1.begin(&M5.In_I2C, addr, freq)
+//   启用  BACKWARD_CONFIG（无 M5GFX/M5Unified）
+//     → i2c_bus.h 内部使用 driver/i2c.h，与 M5GFX 不共存，可安全使用
+//   未启用 BACKWARD_CONFIG（无 M5GFX/M5Unified）
 //     driver/i2c.h 已被其他组件提前包含（_DRIVER_I2C_H_ 已定义）
 //       → i2c_bus.h 会自定义 i2c_config_t，与已定义的版本冲突 → 禁用
 //     driver/i2c.h 尚未被包含（_DRIVER_I2C_H_ 未定义）
@@ -155,17 +162,19 @@ static inline void M5PM1_I2C_ARDUINO_SEND_WAKE(TwoWire *wire, uint8_t addr)
 //     Without BACKWARD_CONFIG: i2c_bus not supported; use legacy driver/i2c.h API.
 //     With    BACKWARD_CONFIG: i2c_bus.h falls back to driver/i2c.h internally, safe to use.
 //   ESP-IDF >= 5.3.0:
-//     With    BACKWARD_CONFIG: i2c_bus.h uses driver/i2c.h internally, always conflict-free.
-//     Without BACKWARD_CONFIG:
+//     [Highest priority] M5GFX or M5Unified is present in the project:
+//       → i2c_bus mode is NEVER safe, compile error emitted:
+//         · BACKWARD_CONFIG=y: i2c_bus.c uses i2c_driver_install() (legacy);
+//                               conflicts with M5GFX's i2c_new_master_bus() (driver_ng) → runtime abort()
+//         · BACKWARD_CONFIG=n: i2c_bus_v2.c also uses i2c_new_master_bus(),
+//                               contends with M5GFX for the same port handle → undefined behaviour
+//       Fix: use pm1.begin(&M5.In_I2C, addr, freq) instead.
+//     With    BACKWARD_CONFIG (no M5GFX/M5Unified): i2c_bus.h uses driver/i2c.h internally, safe.
+//     Without BACKWARD_CONFIG (no M5GFX/M5Unified):
 //       _DRIVER_I2C_H_ defined   (driver/i2c.h already included by another component)
 //         → i2c_bus.h would define its own i2c_config_t, conflicting with the existing one → disabled.
 //       _DRIVER_I2C_H_ not defined (driver/i2c.h not yet included)
 //         → no conflict risk, enable i2c_bus with default config.
-//
-// Note: _DRIVER_I2C_H_ is the include guard of driver/i2c.h (ESP-IDF legacy I2C header).
-//       Checking it at preprocessor time reflects whether driver/i2c.h was included
-//       BEFORE this header. Inclusion after this header cannot be detected here;
-//       in that case the user is responsible for ensuring no conflict (or enabling BACKWARD_CONFIG).
 #if __has_include(<i2c_bus.h>)
 #if ESP_IDF_VERSION < ESP_IDF_VERSION_VAL(5, 3, 0)
 #if defined(CONFIG_I2C_BUS_BACKWARD_CONFIG)
@@ -175,14 +184,51 @@ static inline void M5PM1_I2C_ARDUINO_SEND_WAKE(TwoWire *wire, uint8_t addr)
 #endif
 #else
 // IDF >= 5.3.0
-#if defined(CONFIG_I2C_BUS_BACKWARD_CONFIG)
-#define M5PM1_HAS_I2C_BUS 1  // BACKWARD_CONFIG：i2c_bus.h 使用 driver/i2c.h，无冲突 / no conflict
-#elif defined(_DRIVER_I2C_H_) || (defined(__cplusplus) && __has_include(<utility/I2C_Class.hpp>))
+//
+// ── 运行时冲突（优先级最高）──────────────────────────────────────────────────
+// M5GFX 在全局构造阶段调用 i2c_new_master_bus()，将 I2C 端口注册为 driver_ng。
+// espressif__i2c_bus 的两条路径均与之冲突：
+//   · BACKWARD_CONFIG=y → i2c_bus.c 调用 i2c_driver_install()（旧驱动）
+//                          ESP-IDF check_i2c_driver_conflict() 检测到新旧驱动共存 → abort()
+//   · BACKWARD_CONFIG=n → i2c_bus_v2.c 也调用 i2c_new_master_bus()，与 M5GFX 争抢
+//                          同一端口的 bus_handle，行为未定义
+// 因此，只要 M5GFX 或 M5Unified 存在于项目中，i2c_bus 模式就必须禁用。
+//
+// Runtime conflict (highest priority):
+// M5GFX calls i2c_new_master_bus() (driver_ng) during global construction.
+// espressif__i2c_bus conflicts with it on both code paths:
+//   · BACKWARD_CONFIG=y → i2c_bus.c calls i2c_driver_install() (legacy driver);
+//                          check_i2c_driver_conflict() detects the clash → abort()
+//   · BACKWARD_CONFIG=n → i2c_bus_v2.c also calls i2c_new_master_bus(), competing
+//                          with M5GFX for the same port bus_handle → undefined behaviour
+// Therefore, i2c_bus mode MUST be disabled whenever M5GFX or M5Unified is in the project.
+// ─────────────────────────────────────────────────────────────────────────────
+#if __has_include(<M5GFX.h>) || __has_include(<M5Unified.h>)
+// M5GFX registers driver_ng via i2c_new_master_bus() during global construction.
+// espressif__i2c_bus conflicts with it on both code paths:
+//   BACKWARD_CONFIG=y: i2c_bus.c calls i2c_driver_install() (legacy) → runtime abort()
+//   BACKWARD_CONFIG=n: i2c_bus_v2.c calls i2c_new_master_bus() again → port handle contention
+// Detection: if the user placed '#include <i2c_bus.h>' before '#include <M5PM1.h>',
+// _I2C_BUS_H_ is already defined here and we can emit a clear error.
+// If not, the begin(i2c_bus_handle_t,...) overload silently disappears and the compiler
+// will report 'no matching function for call to begin()' at the call site.
+#if defined(_I2C_BUS_H_)
+#error \
+    "[M5PM1] i2c_bus cannot be used together with M5GFX/M5Unified. " \
+    "M5GFX registers driver_ng via i2c_new_master_bus() during global construction. " \
+    "BACKWARD_CONFIG=y: i2c_bus.c calls i2c_driver_install() (legacy driver) -> runtime abort() in check_i2c_driver_conflict(). " \
+    "BACKWARD_CONFIG=n: i2c_bus_v2.c calls i2c_new_master_bus() on the same port -> undefined behaviour. " \
+    "Fix: use pm1.begin(&M5.In_I2C, addr, freq) and set I2C_USE_MODE=0."
+#endif
+#define M5PM1_HAS_I2C_BUS 0
+// ── 编译期头文件冲突（无 M5GFX/M5Unified）──────────────────────────────────
+#elif defined(CONFIG_I2C_BUS_BACKWARD_CONFIG)
+#define M5PM1_HAS_I2C_BUS 1  // BACKWARD_CONFIG，无 M5GFX/M5Unified：兼容 / compatible without M5GFX/M5Unified
+#elif defined(_DRIVER_I2C_H_)
 #define M5PM1_HAS_I2C_BUS \
-    0  // driver/i2c.h 已包含或 M5Unified 可用（将包含 driver/i2c.h）→ i2c_config_t 冲突风险，禁用
-       // driver/i2c.h already included or M5Unified available (will include driver/i2c.h) → conflict risk, disabled
+    0  // driver/i2c.h 已包含 → i2c_config_t 重复定义风险，禁用 / driver/i2c.h already included → typedef conflict risk
 #else
-#define M5PM1_HAS_I2C_BUS 1  // driver/i2c.h 尚未包含，无冲突风险 / driver/i2c.h not yet included, no conflict
+#define M5PM1_HAS_I2C_BUS 1  // 无冲突风险 / no conflict risk
 #endif
 #endif
 #else
