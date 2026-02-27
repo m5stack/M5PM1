@@ -1983,7 +1983,7 @@ void M5PM1::pinModeWithRes(uint8_t pin, uint8_t mode, m5pm1_err_t* err)
             gpioMode = M5PM1_GPIO_MODE_INPUT;
             pull     = M5PM1_GPIO_PULL_NONE;
             break;
-        case OTHER:
+        case M5PM1_OTHER:
             func     = M5PM1_GPIO_FUNC_OTHER;
             gpioMode = M5PM1_GPIO_MODE_OUTPUT;
             pull     = M5PM1_GPIO_PULL_NONE;

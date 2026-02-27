@@ -874,8 +874,8 @@ typedef enum {
 #ifndef ANALOG
 #define ANALOG 0xC0
 #endif
-#ifndef OTHER
-#define OTHER 0xFF
+#ifndef M5PM1_OTHER
+#define M5PM1_OTHER 0xFF
 #endif
 
 // ============================

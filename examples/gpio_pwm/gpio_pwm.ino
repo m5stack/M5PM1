@@ -20,8 +20,8 @@
  *      - GPIO1: Button to GND (internal pull-up) for input reading.
  *      - PWM_CH_0 maps to GPIO3: LED (with resistor) to GND for PWM breathing.
  *
- * 注意：PWM 使用 GPIO3/4，且需要将引脚功能设为 OTHER。
- * Note: PWM uses GPIO3/4 and requires GPIO func set to OTHER.
+ * 注意：PWM 使用 GPIO3/4，且需要将引脚功能设为 M5PM1_OTHER。
+ * Note: PWM uses GPIO3/4 and requires GPIO func set to M5PM1_OTHER.
  *
  * 若使用 NeoPixel，请勿将 GPIO0 用作普通 GPIO。
  * If using NeoPixel, do not use GPIO0 as a normal GPIO.
@@ -76,9 +76,9 @@ void setup()
     // GPIO1 as input with pull-up; button to GND pulls it low.
     pm1.pinMode(GPIO_IN, INPUT_PULLUP);
 
-    // PWM_CH_0 对应 GPIO3，需要设为 OTHER 才能输出PWM。
-    // PWM_CH_0 maps to GPIO3; set func to OTHER for PWM output.
-    pm1.pinMode(M5PM1_GPIO_NUM_3, OTHER);
+    // PWM_CH_0 对应 GPIO3，需要设为 M5PM1_OTHER 才能输出PWM。
+    // PWM_CH_0 maps to GPIO3; set func to M5PM1_OTHER for PWM output.
+    pm1.pinMode(M5PM1_GPIO_NUM_3, M5PM1_OTHER);
     // PWM 频率全通道共享。
     // PWM frequency is shared across channels.
     pm1.setPwmFrequency(1000);

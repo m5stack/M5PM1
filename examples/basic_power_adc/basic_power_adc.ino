@@ -14,7 +14,7 @@
  * 接线：PM1通过I2C连接；若PM1_I2C_SDA/SCL为-1则使用默认Wire引脚。
  * Wiring: PM1 via I2C; if PM1_I2C_SDA/SCL = -1, default Wire pins are used.
  *
- * ADC1=GPIO1、ADC2=GPIO2，使用前需将GPIO功能设为OTHER。
+ * ADC1=GPIO1、ADC2=GPIO2，使用前需将GPIO功能设为 OTHER。
  * ADC1=GPIO1, ADC2=GPIO2; set GPIO func to OTHER before ADC reads.
  *
  * 注意：切换DCDC/LDO/5VINOUT可能影响外接负载供电，请确认不会误断电。一般DCDC为芯片提供供电，若关闭DCDC则芯片有可能直接下电。
@@ -172,7 +172,7 @@ void setup()
     demoPowerRails();
     printDivider();
 
-    // ADC通道需要将GPIO1/2切到OTHER功能。
+    // ADC通道需要将GPIO1/2切到 OTHER 功能。
     // ADC channels require GPIO1/2 to be set as OTHER function.
     pm1.gpioSetFunc(M5PM1_GPIO_NUM_1, M5PM1_GPIO_FUNC_OTHER);
     pm1.gpioSetFunc(M5PM1_GPIO_NUM_2, M5PM1_GPIO_FUNC_OTHER);
