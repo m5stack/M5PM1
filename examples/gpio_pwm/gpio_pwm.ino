@@ -78,9 +78,7 @@ void setup()
 
     // PWM_CH_0 对应 GPIO3，需要设为 OTHER 才能输出PWM。
     // PWM_CH_0 maps to GPIO3; set func to OTHER for PWM output.
-    // 使用 ANALOG 模式将引脚功能设为 OTHER (适用于 PWM/ADC)
-    // Use ANALOG mode to set pin function to OTHER (for PWM/ADC)
-    pm1.pinMode(M5PM1_GPIO_NUM_3, ANALOG);
+    pm1.pinMode(M5PM1_GPIO_NUM_3, OTHER);
     // PWM 频率全通道共享。
     // PWM frequency is shared across channels.
     pm1.setPwmFrequency(1000);

@@ -158,6 +158,10 @@ M5PM1::M5PM1()
     _wire = nullptr;
     _sda  = -1;
     _scl  = -1;
+#if M5PM1_HAS_M5UNIFIED_I2C
+    _m5_i2c   = nullptr;
+    _commFreq = 0;
+#endif
 #else
     _i2cDriverType = M5PM1_I2C_DRIVER_NONE;
 #if M5PM1_HAS_I2C_MASTER
@@ -333,6 +337,83 @@ m5pm1_err_t M5PM1::begin(TwoWire* wire, uint8_t addr, int8_t sda, int8_t scl, ui
     M5PM1_LOG_I(TAG, "M5PM1 initialized at address 0x%02X (I2C: %lu Hz)", _addr, (unsigned long)_requestedSpeed);
     return M5PM1_OK;
 }
+
+#if M5PM1_HAS_M5UNIFIED_I2C
+m5pm1_err_t M5PM1::begin(m5::I2C_Class* i2c, uint8_t addr, uint32_t speed)
+{
+    if (i2c == nullptr || !i2c->isEnabled()) {
+        M5PM1_LOG_E(TAG, "M5Unified I2C_Class is null or not initialized");
+        return M5PM1_ERR_I2C_CONFIG;
+    }
+
+    _wire   = nullptr;
+    _m5_i2c = i2c;
+    _addr   = addr;
+    _sda    = -1;
+    _scl    = -1;
+
+    // 步骤1：校验用户频率并记录
+    // Step 1: Validate requested speed
+    if (!_isValidI2cFrequency(speed)) {
+        M5PM1_LOG_W(TAG, "Invalid I2C frequency: %lu Hz. Falling back to 100KHz.", (unsigned long)speed);
+        _requestedSpeed = M5PM1_I2C_FREQ_100K;
+    } else {
+        _requestedSpeed = speed;
+    }
+
+    // 步骤2：以 100KHz 发送唤醒信号
+    // Step 2: Send wake signal at 100KHz
+    _commFreq = M5PM1_I2C_FREQ_100K;
+    M5PM1_M5UNIFIED_SEND_WAKE(_m5_i2c, _addr, _commFreq);
+    M5PM1_DELAY_MS(10);
+
+    // 步骤3：验证设备通信（失败则等待 800ms 重试一次）
+    // Step 3: Verify device communication (retry once after 800ms)
+    if (!_initDevice()) {
+        M5PM1_LOG_W(TAG, "Device init failed, retrying after 800ms...");
+        M5PM1_DELAY_MS(800);
+        M5PM1_M5UNIFIED_SEND_WAKE(_m5_i2c, _addr, _commFreq);
+        M5PM1_DELAY_MS(10);
+        if (!_initDevice()) {
+            // 100K 再次失败，尝试 400K
+            // 100K failed again, try 400K
+            M5PM1_LOG_W(TAG, "Device init failed at 100KHz (retry), trying 400KHz...");
+            _commFreq = M5PM1_I2C_FREQ_400K;
+            M5PM1_M5UNIFIED_SEND_WAKE(_m5_i2c, _addr, _commFreq);
+            M5PM1_DELAY_MS(10);
+            if (!_initDevice()) {
+                M5PM1_LOG_E(TAG, "Failed at 100KHz (twice) and 400KHz");
+                _m5_i2c = nullptr;
+                return M5PM1_ERR_I2C_COMM;
+            }
+        }
+    }
+    _initialized = true;
+
+    // 步骤4：配置设备 I2C 参数（关闭睡眠 + 目标频率）
+    // Step 4: Configure device I2C (disable sleep + target speed)
+    m5pm1_i2c_speed_t targetSpeed =
+        (_requestedSpeed == M5PM1_I2C_FREQ_400K) ? M5PM1_I2C_SPEED_400K : M5PM1_I2C_SPEED_100K;
+    if (setI2cConfig(0, targetSpeed) != M5PM1_OK) {
+        M5PM1_LOG_W(TAG, "Failed to set I2C config");
+    }
+
+    // 步骤5：切换通信频率到目标值（M5Unified 无需重装驱动，直接更新 _commFreq）
+    // Step 5: Switch to target frequency (no driver reinstall needed; update _commFreq only)
+    _commFreq = _requestedSpeed;
+
+    // 步骤6：刷新快照并完成初始化
+    // Step 6: Refresh snapshot and finish initialization
+    _lastCommTime = M5PM1_GET_TIME_MS();
+    if (!_snapshotAll()) {
+        _clearAll();
+    }
+
+    _initialized = true;
+    M5PM1_LOG_I(TAG, "M5PM1 initialized at address 0x%02X (I2C: %lu Hz)", _addr, (unsigned long)_requestedSpeed);
+    return M5PM1_OK;
+}
+#endif  // M5PM1_HAS_M5UNIFIED_I2C
 
 #else  // ESP-IDF
 
@@ -1457,7 +1538,14 @@ bool M5PM1::_writeReg(uint8_t reg, uint8_t value)
     bool success = false;
     for (int attempt = 0; attempt < M5PM1_I2C_RETRY_COUNT; ++attempt) {
 #ifdef ARDUINO
-        success = M5PM1_I2C_ARDUINO_WRITE_BYTE(_wire, _addr, reg, value);
+#if M5PM1_HAS_M5UNIFIED_I2C
+        if (_m5_i2c) {
+            success = M5PM1_M5UNIFIED_WRITE_BYTE(_m5_i2c, _addr, reg, value, _commFreq);
+        } else
+#endif
+        {
+            success = M5PM1_I2C_ARDUINO_WRITE_BYTE(_wire, _addr, reg, value);
+        }
 #else
         switch (_i2cDriverType) {
 #if M5PM1_HAS_I2C_MASTER
@@ -1503,7 +1591,14 @@ bool M5PM1::_writeReg16(uint8_t reg, uint16_t value)
     bool success = false;
     for (int attempt = 0; attempt < M5PM1_I2C_RETRY_COUNT; ++attempt) {
 #ifdef ARDUINO
-        success = M5PM1_I2C_ARDUINO_WRITE_REG16(_wire, _addr, reg, value);
+#if M5PM1_HAS_M5UNIFIED_I2C
+        if (_m5_i2c) {
+            success = M5PM1_M5UNIFIED_WRITE_REG16(_m5_i2c, _addr, reg, value, _commFreq);
+        } else
+#endif
+        {
+            success = M5PM1_I2C_ARDUINO_WRITE_REG16(_wire, _addr, reg, value);
+        }
 #else
         switch (_i2cDriverType) {
 #if M5PM1_HAS_I2C_MASTER
@@ -1549,7 +1644,14 @@ bool M5PM1::_readReg(uint8_t reg, uint8_t* value)
     bool success = false;
     for (int attempt = 0; attempt < M5PM1_I2C_RETRY_COUNT; ++attempt) {
 #ifdef ARDUINO
-        success = M5PM1_I2C_ARDUINO_READ_BYTE(_wire, _addr, reg, value);
+#if M5PM1_HAS_M5UNIFIED_I2C
+        if (_m5_i2c) {
+            success = M5PM1_M5UNIFIED_READ_BYTE(_m5_i2c, _addr, reg, value, _commFreq);
+        } else
+#endif
+        {
+            success = M5PM1_I2C_ARDUINO_READ_BYTE(_wire, _addr, reg, value);
+        }
 #else
         switch (_i2cDriverType) {
 #if M5PM1_HAS_I2C_MASTER
@@ -1595,7 +1697,14 @@ bool M5PM1::_readReg16(uint8_t reg, uint16_t* value)
     bool success = false;
     for (int attempt = 0; attempt < M5PM1_I2C_RETRY_COUNT; ++attempt) {
 #ifdef ARDUINO
-        success = M5PM1_I2C_ARDUINO_READ_REG16(_wire, _addr, reg, value);
+#if M5PM1_HAS_M5UNIFIED_I2C
+        if (_m5_i2c) {
+            success = M5PM1_M5UNIFIED_READ_REG16(_m5_i2c, _addr, reg, value, _commFreq);
+        } else
+#endif
+        {
+            success = M5PM1_I2C_ARDUINO_READ_REG16(_wire, _addr, reg, value);
+        }
 #else
         switch (_i2cDriverType) {
 #if M5PM1_HAS_I2C_MASTER
@@ -1641,7 +1750,14 @@ bool M5PM1::_writeBytes(uint8_t reg, const uint8_t* data, uint8_t len)
     bool success = false;
     for (int attempt = 0; attempt < M5PM1_I2C_RETRY_COUNT; ++attempt) {
 #ifdef ARDUINO
-        success = M5PM1_I2C_ARDUINO_WRITE_BYTES(_wire, _addr, reg, len, data);
+#if M5PM1_HAS_M5UNIFIED_I2C
+        if (_m5_i2c) {
+            success = M5PM1_M5UNIFIED_WRITE_BYTES(_m5_i2c, _addr, reg, len, data, _commFreq);
+        } else
+#endif
+        {
+            success = M5PM1_I2C_ARDUINO_WRITE_BYTES(_wire, _addr, reg, len, data);
+        }
 #else
         switch (_i2cDriverType) {
 #if M5PM1_HAS_I2C_MASTER
@@ -1687,7 +1803,14 @@ bool M5PM1::_readBytes(uint8_t reg, uint8_t* data, uint8_t len)
     bool success = false;
     for (int attempt = 0; attempt < M5PM1_I2C_RETRY_COUNT; ++attempt) {
 #ifdef ARDUINO
-        success = M5PM1_I2C_ARDUINO_READ_BYTES(_wire, _addr, reg, len, data);
+#if M5PM1_HAS_M5UNIFIED_I2C
+        if (_m5_i2c) {
+            success = M5PM1_M5UNIFIED_READ_BYTES(_m5_i2c, _addr, reg, len, data, _commFreq);
+        } else
+#endif
+        {
+            success = M5PM1_I2C_ARDUINO_READ_BYTES(_wire, _addr, reg, len, data);
+        }
 #else
         switch (_i2cDriverType) {
 #if M5PM1_HAS_I2C_MASTER
@@ -1859,6 +1982,12 @@ void M5PM1::pinModeWithRes(uint8_t pin, uint8_t mode, m5pm1_err_t* err)
             func     = M5PM1_GPIO_FUNC_OTHER;
             gpioMode = M5PM1_GPIO_MODE_INPUT;
             pull     = M5PM1_GPIO_PULL_NONE;
+            break;
+        case OTHER:
+            func     = M5PM1_GPIO_FUNC_OTHER;
+            gpioMode = M5PM1_GPIO_MODE_OUTPUT;
+            pull     = M5PM1_GPIO_PULL_NONE;
+            setDrive = true;
             break;
         default:
             M5PM1_LOG_E(TAG, "Invalid mode: 0x%02X", mode);
@@ -4650,15 +4779,23 @@ m5pm1_err_t M5PM1::switchI2cSpeed(m5pm1_i2c_speed_t speed)
     M5PM1_DELAY_MS(5);
 
 #ifdef ARDUINO
-    _wire->end();
-    M5PM1_DELAY_MS(10);
-    if (!_wire->begin(_sda, _scl, targetFreq)) {
-        M5PM1_LOG_E(TAG, "Failed to re-initialize I2C bus at %lu Hz", (unsigned long)targetFreq);
-        _wire->begin(_sda, _scl, originalFreq);
-        _writeReg(M5PM1_REG_I2C_CFG, originalCfg);
-        return M5PM1_ERR_I2C_CONFIG;
+#if M5PM1_HAS_M5UNIFIED_I2C
+    if (_m5_i2c) {
+        _commFreq = targetFreq;
+        M5PM1_LOG_I(TAG, "M5Unified I2C frequency updated to %lu Hz", (unsigned long)targetFreq);
+    } else
+#endif
+    {
+        _wire->end();
+        M5PM1_DELAY_MS(10);
+        if (!_wire->begin(_sda, _scl, targetFreq)) {
+            M5PM1_LOG_E(TAG, "Failed to re-initialize I2C bus at %lu Hz", (unsigned long)targetFreq);
+            _wire->begin(_sda, _scl, originalFreq);
+            _writeReg(M5PM1_REG_I2C_CFG, originalCfg);
+            return M5PM1_ERR_I2C_CONFIG;
+        }
+        M5PM1_DELAY_MS(10);
     }
-    M5PM1_DELAY_MS(10);
 #else
     esp_err_t ret;
     switch (_i2cDriverType) {
@@ -4734,6 +4871,12 @@ m5pm1_err_t M5PM1::switchI2cSpeed(m5pm1_i2c_speed_t speed)
             break;
         }
 #endif  // !M5PM1_HAS_I2C_MASTER && !M5PM1_HAS_I2C_BUS
+#if M5PM1_HAS_M5UNIFIED_I2C
+        case M5PM1_I2C_DRIVER_M5UNIFIED:
+            _commFreq = targetFreq;
+            M5PM1_LOG_I(TAG, "M5Unified I2C frequency updated to %lu Hz", (unsigned long)targetFreq);
+            break;
+#endif
         default:
             M5PM1_LOG_E(TAG, "Unknown I2C driver type");
             return M5PM1_ERR_INTERNAL;
@@ -4745,10 +4888,17 @@ m5pm1_err_t M5PM1::switchI2cSpeed(m5pm1_i2c_speed_t speed)
         M5PM1_LOG_E(TAG, "Communication failed after switching to %lu Hz, reverting", (unsigned long)targetFreq);
 
 #ifdef ARDUINO
-        _wire->end();
-        M5PM1_DELAY_MS(10);
-        _wire->begin(_sda, _scl, originalFreq);
-        M5PM1_DELAY_MS(10);
+#if M5PM1_HAS_M5UNIFIED_I2C
+        if (_m5_i2c) {
+            _commFreq = originalFreq;
+        } else
+#endif
+        {
+            _wire->end();
+            M5PM1_DELAY_MS(10);
+            _wire->begin(_sda, _scl, originalFreq);
+            M5PM1_DELAY_MS(10);
+        }
 #else
         switch (_i2cDriverType) {
 #if M5PM1_HAS_I2C_MASTER
@@ -4790,6 +4940,11 @@ m5pm1_err_t M5PM1::switchI2cSpeed(m5pm1_i2c_speed_t speed)
                 break;
             }
 #endif  // !M5PM1_HAS_I2C_MASTER && !M5PM1_HAS_I2C_BUS
+#if M5PM1_HAS_M5UNIFIED_I2C
+            case M5PM1_I2C_DRIVER_M5UNIFIED:
+                _commFreq = originalFreq;
+                break;
+#endif
             default:
                 break;
         }
@@ -4829,6 +4984,12 @@ bool M5PM1::isAutoWakeEnabled() const
 m5pm1_err_t M5PM1::sendWakeSignal()
 {
 #ifdef ARDUINO
+#if M5PM1_HAS_M5UNIFIED_I2C
+    if (_m5_i2c) {
+        M5PM1_M5UNIFIED_SEND_WAKE(_m5_i2c, _addr, _commFreq);
+        return M5PM1_OK;
+    }
+#endif
     M5PM1_I2C_ARDUINO_SEND_WAKE(_wire, _addr);
     return M5PM1_OK;
 #else

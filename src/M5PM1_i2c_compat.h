@@ -122,6 +122,93 @@ static inline void M5PM1_I2C_ARDUINO_SEND_WAKE(TwoWire *wire, uint8_t addr)
 }
 #endif
 
+// ============================
+// M5Unified I2C_Class 检测 (Arduino)
+// M5Unified I2C_Class Detection (Arduino)
+// ============================
+#if defined(__cplusplus) && __has_include(<utility/I2C_Class.hpp>)
+#define M5PM1_HAS_M5UNIFIED_I2C 1
+#include <utility/I2C_Class.hpp>
+#else
+#define M5PM1_HAS_M5UNIFIED_I2C 0
+#endif
+
+// ============================
+// M5Unified I2C_Class 通信封装 (Arduino)
+// M5Unified I2C_Class Communication Wrappers (Arduino)
+// (C++ only — m5::I2C_Class is a C++ class)
+// ============================
+#if M5PM1_HAS_M5UNIFIED_I2C
+
+#ifndef M5PM1_M5UNIFIED_READ_BYTE
+static inline bool M5PM1_M5UNIFIED_READ_BYTE(m5::I2C_Class *i2c, uint8_t addr, uint8_t reg, uint8_t *data,
+                                             uint32_t freq)
+{
+    return i2c->readRegister(addr, reg, data, 1, freq);
+}
+#endif
+
+#ifndef M5PM1_M5UNIFIED_READ_BYTES
+static inline bool M5PM1_M5UNIFIED_READ_BYTES(m5::I2C_Class *i2c, uint8_t addr, uint8_t reg, size_t len, uint8_t *data,
+                                              uint32_t freq)
+{
+    return i2c->readRegister(addr, reg, data, len, freq);
+}
+#endif
+
+#ifndef M5PM1_M5UNIFIED_READ_REG16
+static inline bool M5PM1_M5UNIFIED_READ_REG16(m5::I2C_Class *i2c, uint8_t addr, uint8_t reg, uint16_t *data,
+                                              uint32_t freq)
+{
+    uint8_t buf[2];
+    if (!i2c->readRegister(addr, reg, buf, 2, freq)) return false;
+    // 小端模式：低字节在前 / Little-endian: low byte first
+    *data = (uint16_t)buf[0] | ((uint16_t)buf[1] << 8);
+    return true;
+}
+#endif
+
+#ifndef M5PM1_M5UNIFIED_WRITE_BYTE
+static inline bool M5PM1_M5UNIFIED_WRITE_BYTE(m5::I2C_Class *i2c, uint8_t addr, uint8_t reg, uint8_t data,
+                                              uint32_t freq)
+{
+    return i2c->writeRegister8(addr, reg, data, freq);
+}
+#endif
+
+#ifndef M5PM1_M5UNIFIED_WRITE_BYTES
+static inline bool M5PM1_M5UNIFIED_WRITE_BYTES(m5::I2C_Class *i2c, uint8_t addr, uint8_t reg, size_t len,
+                                               const uint8_t *data, uint32_t freq)
+{
+    return i2c->writeRegister(addr, reg, data, len, freq);
+}
+#endif
+
+#ifndef M5PM1_M5UNIFIED_WRITE_REG16
+static inline bool M5PM1_M5UNIFIED_WRITE_REG16(m5::I2C_Class *i2c, uint8_t addr, uint8_t reg, uint16_t data,
+                                               uint32_t freq)
+{
+    uint8_t buf[2];
+    // 小端模式：低字节在前 / Little-endian: low byte first
+    buf[0] = (uint8_t)(data & 0xFF);
+    buf[1] = (uint8_t)((data >> 8) & 0xFF);
+    return i2c->writeRegister(addr, reg, buf, 2, freq);
+}
+#endif
+
+#ifndef M5PM1_M5UNIFIED_SEND_WAKE
+// 产生 I2C START 信号以唤醒处于睡眠的 PM1
+// Generate I2C START signal to wake PM1 from sleep
+static inline bool M5PM1_M5UNIFIED_SEND_WAKE(m5::I2C_Class *i2c, uint8_t addr, uint32_t freq)
+{
+    i2c->start(addr, false, freq);
+    i2c->stop();
+    return true;
+}
+#endif
+
+#endif  // M5PM1_HAS_M5UNIFIED_I2C
+
 #else  // ESP-IDF
 
 #include <esp_err.h>
