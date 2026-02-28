@@ -8,17 +8,17 @@
 #include <string.h>
 #include <stdio.h>
 
-static const char* TAG      = "M5PM1";          // 保留用于 setLogLevel 等极少数场景
-static const char* TAG_I2C  = "M5PM1_I2C";      // I2C 总线初始化、底层读写、I2C 配置
-static const char* TAG_GPIO = "M5PM1_GPIO";      // GPIO 引脚操作
-static const char* TAG_ADC  = "M5PM1_ADC";       // ADC 采样、电压读取
-static const char* TAG_PWM  = "M5PM1_PWM";       // PWM 频率/占空比控制
-static const char* TAG_LED  = "M5PM1_LED";       // WS2812 LED + LED 使能
-static const char* TAG_AMP  = "M5PM1_AMP";       // AW8737A 功放控制
-static const char* TAG_PWR  = "M5PM1_PWR";       // 电源管理 (DCDC/LDO/Boost/充电/电池/关机/重启)
-static const char* TAG_BTN  = "M5PM1_BTN";       // 按钮配置与状态
-static const char* TAG_IRQ  = "M5PM1_IRQ";       // 中断掩码/状态/清除
-static const char* TAG_SYS  = "M5PM1_SYS";       // 系统级 (设备信息/定时器/WDT/RTC/系统配置)
+static const char* TAG      = "M5PM1";       // 保留用于 setLogLevel 等极少数场景
+static const char* TAG_I2C  = "M5PM1_I2C";   // I2C 总线初始化、底层读写、I2C 配置
+static const char* TAG_GPIO = "M5PM1_GPIO";  // GPIO 引脚操作
+static const char* TAG_ADC  = "M5PM1_ADC";   // ADC 采样、电压读取
+static const char* TAG_PWM  = "M5PM1_PWM";   // PWM 频率/占空比控制
+static const char* TAG_LED  = "M5PM1_LED";   // WS2812 LED + LED 使能
+static const char* TAG_AMP  = "M5PM1_AMP";   // AW8737A 功放控制
+static const char* TAG_PWR  = "M5PM1_PWR";   // 电源管理 (DCDC/LDO/Boost/充电/电池/关机/重启)
+static const char* TAG_BTN  = "M5PM1_BTN";   // 按钮配置与状态
+static const char* TAG_IRQ  = "M5PM1_IRQ";   // 中断掩码/状态/清除
+static const char* TAG_SYS  = "M5PM1_SYS";   // 系统级 (设备信息/定时器/WDT/RTC/系统配置)
 
 #ifdef ARDUINO
 #include <Arduino.h>
@@ -43,25 +43,25 @@ static m5pm1_log_level_t _m5pm1_log_level = M5PM1_LOG_LEVEL_INFO;
         }                                                             \
     } while (0)
 
-#define M5PM1_LOG_E(tag, fmt, ...)                                        \
-    do {                                                                  \
-        if (_m5pm1_log_level >= M5PM1_LOG_LEVEL_ERROR) {                  \
-            Serial.printf("[E][%s] " fmt "\r\n", tag, ##__VA_ARGS__);     \
-        }                                                                 \
+#define M5PM1_LOG_E(tag, fmt, ...)                                    \
+    do {                                                              \
+        if (_m5pm1_log_level >= M5PM1_LOG_LEVEL_ERROR) {              \
+            Serial.printf("[E][%s] " fmt "\r\n", tag, ##__VA_ARGS__); \
+        }                                                             \
     } while (0)
 
-#define M5PM1_LOG_D(tag, fmt, ...)                                        \
-    do {                                                                  \
-        if (_m5pm1_log_level >= M5PM1_LOG_LEVEL_DEBUG) {                  \
-            Serial.printf("[D][%s] " fmt "\r\n", tag, ##__VA_ARGS__);     \
-        }                                                                 \
+#define M5PM1_LOG_D(tag, fmt, ...)                                    \
+    do {                                                              \
+        if (_m5pm1_log_level >= M5PM1_LOG_LEVEL_DEBUG) {              \
+            Serial.printf("[D][%s] " fmt "\r\n", tag, ##__VA_ARGS__); \
+        }                                                             \
     } while (0)
 
-#define M5PM1_LOG_V(tag, fmt, ...)                                          \
-    do {                                                                    \
-        if (_m5pm1_log_level >= M5PM1_LOG_LEVEL_VERBOSE) {                  \
-            Serial.printf("[V][%s] " fmt "\r\n", tag, ##__VA_ARGS__);       \
-        }                                                                   \
+#define M5PM1_LOG_V(tag, fmt, ...)                                    \
+    do {                                                              \
+        if (_m5pm1_log_level >= M5PM1_LOG_LEVEL_VERBOSE) {            \
+            Serial.printf("[V][%s] " fmt "\r\n", tag, ##__VA_ARGS__); \
+        }                                                             \
     } while (0)
 #else
 // 强制本组件编译所有级别的日志，实际输出由运行时的 esp_log_level_set 控制
@@ -281,7 +281,8 @@ m5pm1_err_t M5PM1::begin(TwoWire* wire, uint8_t addr, int8_t sda, int8_t scl, ui
     // 步骤1：校验用户频率并记录
     // Step 1: Validate requested speed and store it
     if (!_isValidI2cFrequency(speed)) {
-        M5PM1_LOG_W(TAG_I2C, "Invalid I2C frequency: %lu Hz. PM1 only supports 100KHz or 400KHz. Falling back to 100KHz.",
+        M5PM1_LOG_W(TAG_I2C,
+                    "Invalid I2C frequency: %lu Hz. PM1 only supports 100KHz or 400KHz. Falling back to 100KHz.",
                     (unsigned long)speed);
         _requestedSpeed = M5PM1_I2C_FREQ_100K;
     } else {
@@ -465,7 +466,8 @@ m5pm1_err_t M5PM1::begin(i2c_port_t port, uint8_t addr, int sda, int scl, uint32
     // 步骤1：校验用户频率并记录
     // Step 1: Validate requested speed and store it
     if (!_isValidI2cFrequency(speed)) {
-        M5PM1_LOG_W(TAG_I2C, "Invalid I2C frequency: %lu Hz. PM1 only supports 100KHz or 400KHz. Falling back to 100KHz.",
+        M5PM1_LOG_W(TAG_I2C,
+                    "Invalid I2C frequency: %lu Hz. PM1 only supports 100KHz or 400KHz. Falling back to 100KHz.",
                     (unsigned long)speed);
         _requestedSpeed = M5PM1_I2C_FREQ_100K;
     } else {
@@ -588,7 +590,8 @@ m5pm1_err_t M5PM1::begin(i2c_port_t port, uint8_t addr, int sda, int scl, uint32
     dev_config.scl_speed_hz = _requestedSpeed;
     ret                     = i2c_master_bus_add_device(_i2c_master_bus, &dev_config, &_i2c_master_dev);
     if (ret != ESP_OK) {
-        M5PM1_LOG_E(TAG_I2C, "Failed to switch device to %lu Hz: %s", (unsigned long)_requestedSpeed, esp_err_to_name(ret));
+        M5PM1_LOG_E(TAG_I2C, "Failed to switch device to %lu Hz: %s", (unsigned long)_requestedSpeed,
+                    esp_err_to_name(ret));
         i2c_del_master_bus(_i2c_master_bus);
         _i2c_master_bus = nullptr;
         _initialized    = false;
@@ -738,7 +741,8 @@ m5pm1_err_t M5PM1::begin(i2c_master_bus_handle_t bus, uint8_t addr, uint32_t spe
     // 步骤1：校验用户频率并记录
     // Step 1: Validate requested speed and store it
     if (!_isValidI2cFrequency(speed)) {
-        M5PM1_LOG_W(TAG_I2C, "Invalid I2C frequency: %lu Hz. PM1 only supports 100KHz or 400KHz. Falling back to 100KHz.",
+        M5PM1_LOG_W(TAG_I2C,
+                    "Invalid I2C frequency: %lu Hz. PM1 only supports 100KHz or 400KHz. Falling back to 100KHz.",
                     (unsigned long)speed);
         _requestedSpeed = M5PM1_I2C_FREQ_100K;
     } else {
@@ -828,7 +832,8 @@ m5pm1_err_t M5PM1::begin(i2c_master_bus_handle_t bus, uint8_t addr, uint32_t spe
     dev_config.scl_speed_hz = _requestedSpeed;
     ret                     = i2c_master_bus_add_device(_i2c_master_bus, &dev_config, &_i2c_master_dev);
     if (ret != ESP_OK) {
-        M5PM1_LOG_E(TAG_I2C, "Failed to switch device to %lu Hz: %s", (unsigned long)_requestedSpeed, esp_err_to_name(ret));
+        M5PM1_LOG_E(TAG_I2C, "Failed to switch device to %lu Hz: %s", (unsigned long)_requestedSpeed,
+                    esp_err_to_name(ret));
         _initialized = false;
         return M5PM1_ERR_I2C_CONFIG;
     }
@@ -860,7 +865,8 @@ m5pm1_err_t M5PM1::begin(i2c_bus_handle_t bus, uint8_t addr, uint32_t speed)
     // 步骤1：校验用户频率并记录
     // Step 1: Validate requested speed and store it
     if (!_isValidI2cFrequency(speed)) {
-        M5PM1_LOG_W(TAG_I2C, "Invalid I2C frequency: %lu Hz. PM1 only supports 100KHz or 400KHz. Falling back to 100KHz.",
+        M5PM1_LOG_W(TAG_I2C,
+                    "Invalid I2C frequency: %lu Hz. PM1 only supports 100KHz or 400KHz. Falling back to 100KHz.",
                     (unsigned long)speed);
         _requestedSpeed = M5PM1_I2C_FREQ_100K;
     } else {
@@ -1867,8 +1873,8 @@ bool M5PM1::_writeBytes(uint8_t reg, const uint8_t* data, uint8_t len)
     }
     _lastCommTime = M5PM1_GET_TIME_MS();
     if (success) {
-        M5PM1_LOG_V(TAG_I2C, "WriteBytes Reg[0x%02X] len=%d: %02X %02X %02X...", reg, len,
-                    len > 0 ? data[0] : 0, len > 1 ? data[1] : 0, len > 2 ? data[2] : 0);
+        M5PM1_LOG_V(TAG_I2C, "WriteBytes Reg[0x%02X] len=%d: %02X %02X %02X...", reg, len, len > 0 ? data[0] : 0,
+                    len > 1 ? data[1] : 0, len > 2 ? data[2] : 0);
     } else {
         M5PM1_LOG_E(TAG_I2C, "WriteBytes Reg[0x%02X] len=%d failed", reg, len);
     }
@@ -1926,8 +1932,8 @@ bool M5PM1::_readBytes(uint8_t reg, uint8_t* data, uint8_t len)
     }
     _lastCommTime = M5PM1_GET_TIME_MS();
     if (success) {
-        M5PM1_LOG_V(TAG_I2C, "ReadBytes  Reg[0x%02X] len=%d: %02X %02X %02X...", reg, len,
-                    len > 0 ? data[0] : 0, len > 1 ? data[1] : 0, len > 2 ? data[2] : 0);
+        M5PM1_LOG_V(TAG_I2C, "ReadBytes  Reg[0x%02X] len=%d: %02X %02X %02X...", reg, len, len > 0 ? data[0] : 0,
+                    len > 1 ? data[1] : 0, len > 2 ? data[2] : 0);
     } else {
         M5PM1_LOG_E(TAG_I2C, "ReadBytes  Reg[0x%02X] len=%d failed", reg, len);
     }
@@ -2593,7 +2599,8 @@ m5pm1_err_t M5PM1::verifyPinConfig(bool enableLog)
         if (cached.wake_en != actualWakeEn) {
             hasError = true;
             if (enableLog) {
-                M5PM1_LOG_W(TAG_GPIO, "GPIO%d WAKE_EN mismatch: cached=%d actual=%d", pin, cached.wake_en, actualWakeEn);
+                M5PM1_LOG_W(TAG_GPIO, "GPIO%d WAKE_EN mismatch: cached=%d actual=%d", pin, cached.wake_en,
+                            actualWakeEn);
             }
         }
 
@@ -3010,7 +3017,8 @@ m5pm1_err_t M5PM1::setPwmDuty12bit(m5pm1_pwm_channel_t channel, uint16_t duty12,
         return M5PM1_ERR_NOT_INIT;
     }
 
-    M5PM1_LOG_D(TAG_PWM, "setPwmDuty12bit: ch=%d duty=%d pol=%s en=%s", channel, duty12, polarity ? "Inv" : "Norm", enable ? "On" : "Off");
+    M5PM1_LOG_D(TAG_PWM, "setPwmDuty12bit: ch=%d duty=%d pol=%s en=%s", channel, duty12, polarity ? "Inv" : "Norm",
+                enable ? "On" : "Off");
 
     uint8_t regL  = (channel == M5PM1_PWM_CH_0) ? M5PM1_REG_PWM0_L : M5PM1_REG_PWM1_L;
     uint8_t dataL = (uint8_t)(duty12 & 0xFF);
@@ -3053,7 +3061,8 @@ m5pm1_err_t M5PM1::setPwmDuty12bit(m5pm1_pwm_channel_t channel, uint16_t duty12,
     _pwmStatesValid              = true;
     _autoSnapshotUpdate(M5PM1_SNAPSHOT_DOMAIN_PWM);
 
-    M5PM1_LOG_I(TAG_PWM, "PWM ch%d verified: duty=%d pol=%s en=%s", channel, duty12, polarity ? "Inv" : "Norm", enable ? "On" : "Off");
+    M5PM1_LOG_I(TAG_PWM, "PWM ch%d verified: duty=%d pol=%s en=%s", channel, duty12, polarity ? "Inv" : "Norm",
+                enable ? "On" : "Off");
     return M5PM1_OK;
 }
 
@@ -3225,7 +3234,11 @@ m5pm1_err_t M5PM1::getPowerSource(m5pm1_pwr_src_t* src)
     uint8_t val;
     if (!_readReg(M5PM1_REG_PWR_SRC, &val)) return M5PM1_ERR_I2C_COMM;
     *src = (m5pm1_pwr_src_t)(val & 0x07);
-    M5PM1_LOG_D(TAG_ADC, "Power source: %s", (*src == 0) ? "None" : (*src == 1) ? "USB" : (*src == 2) ? "Battery" : "Unknown");
+    M5PM1_LOG_D(TAG_ADC, "Power source: %s",
+                (*src == 0)   ? "None"
+                : (*src == 1) ? "USB"
+                : (*src == 2) ? "Battery"
+                              : "Unknown");
     return M5PM1_OK;
 }
 
@@ -3660,7 +3673,10 @@ m5pm1_err_t M5PM1::irqGetGpioStatus(uint8_t* status, m5pm1_clean_type_t cleanTyp
         return M5PM1_ERR_NOT_INIT;
     }
     if (!_readReg(M5PM1_REG_IRQ_STATUS1, status)) return M5PM1_ERR_I2C_COMM;
-    M5PM1_LOG_D(TAG_IRQ, "IRQ GPIO status: 0x%02X clean=%s", *status, cleanType == M5PM1_CLEAN_NONE ? "None" : cleanType == M5PM1_CLEAN_ONCE ? "Once" : "All");
+    M5PM1_LOG_D(TAG_IRQ, "IRQ GPIO status: 0x%02X clean=%s", *status,
+                cleanType == M5PM1_CLEAN_NONE   ? "None"
+                : cleanType == M5PM1_CLEAN_ONCE ? "Once"
+                                                : "All");
 
     if (cleanType == M5PM1_CLEAN_ONCE && *status != 0) {
         // 清除已触发的位（采用"写0清除"机制）
@@ -3851,7 +3867,10 @@ m5pm1_err_t M5PM1::irqGetBtnStatus(uint8_t* status, m5pm1_clean_type_t cleanType
         return M5PM1_ERR_NOT_INIT;
     }
     if (!_readReg(M5PM1_REG_IRQ_STATUS3, status)) return M5PM1_ERR_I2C_COMM;
-    M5PM1_LOG_D(TAG_IRQ, "IRQ BTN status: 0x%02X clean=%s", *status, cleanType == M5PM1_CLEAN_NONE ? "None" : cleanType == M5PM1_CLEAN_ONCE ? "Once" : "All");
+    M5PM1_LOG_D(TAG_IRQ, "IRQ BTN status: 0x%02X clean=%s", *status,
+                cleanType == M5PM1_CLEAN_NONE   ? "None"
+                : cleanType == M5PM1_CLEAN_ONCE ? "Once"
+                                                : "All");
 
     if (cleanType == M5PM1_CLEAN_ONCE && *status != 0) {
         // 清除已触发的位（采用"写0清除"机制）
@@ -3954,7 +3973,8 @@ m5pm1_err_t M5PM1::irqSetGpioMask(m5pm1_irq_gpio_t gpio, m5pm1_irq_mask_ctrl_t m
         M5PM1_LOG_E(TAG_IRQ, "Not initialized");
         return M5PM1_ERR_NOT_INIT;
     }
-    M5PM1_LOG_I(TAG_IRQ, "IRQ GPIO mask 0x%02X %s", (uint8_t)gpio, mask == M5PM1_IRQ_MASK_ENABLE ? "Enabled" : "Disabled");
+    M5PM1_LOG_I(TAG_IRQ, "IRQ GPIO mask 0x%02X %s", (uint8_t)gpio,
+                mask == M5PM1_IRQ_MASK_ENABLE ? "Enabled" : "Disabled");
 
     uint8_t regVal;
     if (!_readReg(M5PM1_REG_IRQ_MASK1, &regVal)) return M5PM1_ERR_I2C_COMM;
@@ -4052,7 +4072,8 @@ m5pm1_err_t M5PM1::irqSetSysMask(m5pm1_irq_sys_t event, m5pm1_irq_mask_ctrl_t ma
         M5PM1_LOG_E(TAG_IRQ, "Not initialized");
         return M5PM1_ERR_NOT_INIT;
     }
-    M5PM1_LOG_I(TAG_IRQ, "IRQ SYS mask 0x%02X %s", (uint8_t)event, mask == M5PM1_IRQ_MASK_ENABLE ? "Enabled" : "Disabled");
+    M5PM1_LOG_I(TAG_IRQ, "IRQ SYS mask 0x%02X %s", (uint8_t)event,
+                mask == M5PM1_IRQ_MASK_ENABLE ? "Enabled" : "Disabled");
 
     uint8_t regVal;
     if (!_readReg(M5PM1_REG_IRQ_MASK2, &regVal)) return M5PM1_ERR_I2C_COMM;
@@ -4149,7 +4170,8 @@ m5pm1_err_t M5PM1::irqSetBtnMask(m5pm1_irq_btn_t type, m5pm1_irq_mask_ctrl_t mas
         M5PM1_LOG_E(TAG_IRQ, "Not initialized");
         return M5PM1_ERR_NOT_INIT;
     }
-    M5PM1_LOG_I(TAG_IRQ, "IRQ BTN mask 0x%02X %s", (uint8_t)type, mask == M5PM1_IRQ_MASK_ENABLE ? "Enabled" : "Disabled");
+    M5PM1_LOG_I(TAG_IRQ, "IRQ BTN mask 0x%02X %s", (uint8_t)type,
+                mask == M5PM1_IRQ_MASK_ENABLE ? "Enabled" : "Disabled");
 
     uint8_t regVal;
     if (!_readReg(M5PM1_REG_IRQ_MASK3, &regVal)) return M5PM1_ERR_I2C_COMM;
@@ -4446,8 +4468,8 @@ m5pm1_err_t M5PM1::setLedColor(uint8_t index, uint8_t r, uint8_t g, uint8_t b)
     // 验证关键位是否匹配
     // Verify critical bits match
     if (actualRgb565 != rgb565) {
-        M5PM1_LOG_E(TAG_LED, "LED color verification failed for index %d: expected=0x%04X, actual=0x%04X", index, rgb565,
-                    actualRgb565);
+        M5PM1_LOG_E(TAG_LED, "LED color verification failed for index %d: expected=0x%04X, actual=0x%04X", index,
+                    rgb565, actualRgb565);
         return M5PM1_FAIL;
     }
 
@@ -4579,7 +4601,8 @@ m5pm1_err_t M5PM1::setAw8737aPulse(m5pm1_gpio_num_t pin, m5pm1_aw8737a_pulse_t n
     // Verify critical bits match
     uint8_t actualValue = actualReg & 0x7F;
     if (actualValue != regValue) {
-        M5PM1_LOG_E(TAG_AMP, "AW8737A pulse verification failed: expected=0x%02X, actual=0x%02X", regValue, actualValue);
+        M5PM1_LOG_E(TAG_AMP, "AW8737A pulse verification failed: expected=0x%02X, actual=0x%02X", regValue,
+                    actualValue);
         return M5PM1_FAIL;
     }
 
@@ -4635,8 +4658,8 @@ m5pm1_err_t M5PM1::refreshAw8737aPulse()
     // 输出详细日志
     // Output detailed log
     const char* driveStr = (_pinStatus[_aw8737aPin].drive == M5PM1_GPIO_DRIVE_PUSHPULL) ? "PUSH-PULL" : "OPEN-DRAIN";
-    M5PM1_LOG_I(TAG_AMP, "AW8737A pulse refresh: pin=%d, pulseNum=%d, mode=OUTPUT, drive=%s", _aw8737aPin, _aw8737aPulseNum,
-                driveStr);
+    M5PM1_LOG_I(TAG_AMP, "AW8737A pulse refresh: pin=%d, pulseNum=%d, mode=OUTPUT, drive=%s", _aw8737aPin,
+                _aw8737aPulseNum, driveStr);
 
     M5PM1_DELAY_MS(20);
     _autoSnapshotUpdate(M5PM1_SNAPSHOT_DOMAIN_AW8737A);
