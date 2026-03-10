@@ -331,9 +331,9 @@ typedef enum {
 // ---- NeoPixel Registers ----
 #define M5PM1_REG_NEO_CFG \
     0x50  // R/W   NeoPixel配置 / NeoPixel configuration
-          //       [7-6] 保留 / Reserved
-          //       [5] REFRESH - 写1刷新LED / REFRESH - write 1 to refresh LEDs
-          //       [4:0] LED_CNT - LED数量 (1-31，5位寄存器限制) / LED count (1-31, 5-bit register limit)
+          //       [7] 保留 / Reserved
+          //       [6] REFRESH - 写1刷新LED / REFRESH - write 1 to refresh LEDs
+          //       [5:0] LED_CNT - LED数量 (1-32，固件最大支持32) / LED count (1-32, firmware max 32)
 #define M5PM1_REG_AW8737A_PULSE \
     0x53  // R/W   AW8737A脉冲控制 / AW8737A pulse control
           //       用于控制AW8737A音频放大器增益 / Used to control AW8737A audio amplifier gain
@@ -384,8 +384,8 @@ typedef enum {
 
 // ---- NeoPixel配置寄存器位 ----
 // ---- NEO_CFG Register Bits ----
-#define M5PM1_NEO_CFG_REFRESH    (1 << 5)  // 刷新标志 / Refresh flag (write 1 to update LEDs)
-#define M5PM1_NEO_CFG_COUNT_MASK 0x1F      // LED数量掩码 / LED count mask (0-31)
+#define M5PM1_NEO_CFG_REFRESH    (1 << 6)  // 刷新标志 / Refresh flag (write 1 to update LEDs)
+#define M5PM1_NEO_CFG_COUNT_MASK 0x3F      // LED数量掩码 / LED count mask (0-63, firmware max 32)
 
 // ============================
 // 枚举类型
@@ -2411,12 +2411,12 @@ public:
     /**
      * @brief 设置 NeoPixel LED 数量
      *        Set NeoPixel LED count
-     * @param count LED 数量 (1-31，受5位寄存器限制)
-     *              LED count (1-31, limited by 5-bit register)
+     * @param count LED 数量 (1-32)
+     *              LED count (1-32)
      * @return 成功返回 M5PM1_OK，否则返回错误码
      *         Return M5PM1_OK on success, error code otherwise
-     * @note 寄存器为5位宽度，最大值为31。设置为32会溢出为0
-     *       Register is 5-bit wide, maximum value is 31. Setting to 32 will overflow to 0
+     * @note 寄存器为6位宽度[5:0]，固件最大支持32个LED
+     *       Register is 6-bit wide [5:0], firmware supports max 32 LEDs
      */
     m5pm1_err_t setLedCount(uint8_t count);
 

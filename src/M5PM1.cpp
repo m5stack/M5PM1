@@ -4392,10 +4392,10 @@ m5pm1_err_t M5PM1::setLeds(const m5pm1_rgb_t* colors, uint8_t arraySize, uint8_t
 
 m5pm1_err_t M5PM1::setLedCount(uint8_t count)
 {
-    // 验证参数：count 必须在 1-31 范围内（5位寄存器限制）
-    // Validate parameter: count must be in range 1-31 (5-bit register limit)
-    if (count == 0 || count > 31) {
-        M5PM1_LOG_E(TAG_LED, "LED count %d out of valid range (1-31)", count);
+    // 验证参数：count 必须在 1-32 范围内（固件最大支持32）
+    // Validate parameter: count must be in range 1-32 (firmware max 32)
+    if (count == 0 || count > M5PM1_MAX_LED_COUNT) {
+        M5PM1_LOG_E(TAG_LED, "LED count %d out of valid range (1-%d)", count, M5PM1_MAX_LED_COUNT);
         return M5PM1_ERR_INVALID_ARG;
     }
     if (!_initialized) {
