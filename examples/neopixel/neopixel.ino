@@ -11,9 +11,27 @@
  * NeoPixel 彩虹渐变示例（使用 GPIO0 作为 LED_EN/数据相关功能）。
  * NeoPixel rainbow demo (uses GPIO0 for LED_EN/data-related function).
  *
- * 注意：NeoPixel 仅支持 GPIO0，且 LED 数量最大 31（寄存器 5-bit 限制）。
- * Note: NeoPixel is only supported on GPIO0, and LED count max is 31 (5-bit limit).
+ * 注意：NeoPixel 仅支持 GPIO0，LED 数量最大 32（固件限制）。
+ * Note: NeoPixel is only supported on GPIO0, and LED count max is 32 (firmware limit).
+ *
+ * GPIO0 NeoPixel 初始化提供两种等效方案，按需选择其一：
+ * Two equivalent GPIO0 NeoPixel init approaches — choose one:
+ *
+ *   方案1（分步配置）/ Approach 1 (step-by-step):
+ *     pm1.gpioSetFunc(M5PM1_GPIO_NUM_0, M5PM1_GPIO_FUNC_OTHER);
+ *     pm1.gpioSetDrive(M5PM1_GPIO_NUM_0, M5PM1_GPIO_DRIVE_PUSHPULL);
+ *     pm1.gpioSetOutput(M5PM1_GPIO_NUM_0, true);
+ *
+ *   方案2（简化调用，库内部等效方案1）/ Approach 2 (simplified, internally equivalent):
+ *     pm1.pinMode(M5PM1_GPIO_NUM_0, M5PM1_OTHER);
+ *
+ * 本示例默认使用方案2。修改 USE_INIT_APPROACH 为 1 可切换至方案1。
+ * This demo defaults to Approach 2. Set USE_INIT_APPROACH to 1 for Approach 1.
  */
+
+// 选择初始化方案：1=分步配置  2=简化调用
+// Select init approach: 1=step-by-step  2=simplified
+#define USE_INIT_APPROACH 2
 
 M5PM1 pm1;
 
@@ -22,16 +40,16 @@ M5PM1 pm1;
 #define LOGE(fmt, ...) Serial.printf("[PM1][E] " fmt "\r\n", ##__VA_ARGS__)
 
 #ifndef PM1_I2C_SDA
-#define PM1_I2C_SDA 47
+#define PM1_I2C_SDA 48
 #endif
 #ifndef PM1_I2C_SCL
-#define PM1_I2C_SCL 48
+#define PM1_I2C_SCL 47
 #endif
 #ifndef PM1_I2C_FREQ
 #define PM1_I2C_FREQ M5PM1_I2C_FREQ_100K
 #endif
 
-static const uint8_t LED_COUNT  = 8;
+static const uint8_t LED_COUNT  = 1;
 static const uint8_t BRIGHTNESS = 64;
 
 static void printDivider()
@@ -86,14 +104,34 @@ void setup()
         }
     }
 
-    // GPIO0 设置为 OTHER 以启用 NeoPixel；避免与 GPIO/IRQ/WAKE 冲突。
-    // Set GPIO0 to OTHER for NeoPixel; avoid GPIO/IRQ/WAKE conflicts.
+#if USE_INIT_APPROACH == 1
+    // ---- 方案1：分步配置 ----
+    // ---- Approach 1: step-by-step configuration ----
+    // 将 GPIO0 功能切换为 OTHER（NeoPixel/LED_EN）
+    // Switch GPIO0 function to OTHER (NeoPixel/LED_EN)
     pm1.gpioSetFunc(M5PM1_GPIO_NUM_0, M5PM1_GPIO_FUNC_OTHER);
-    // LED_EN 默认高电平使能灯带。
-    // LED_EN default high level enables LEDs.
+    // 设置推挽驱动
+    // Set push-pull drive
+    pm1.gpioSetDrive(M5PM1_GPIO_NUM_0, M5PM1_GPIO_DRIVE_PUSHPULL);
+    // 输出高电平使能
+    // Output high to enable
+    pm1.gpioSetOutput(M5PM1_GPIO_NUM_0, true);
+    LOGI("GPIO0 NeoPixel init: Approach 1 (step-by-step)");
+#else
+    // ---- 方案2：简化调用（库内部等效方案1）----
+    // ---- Approach 2: simplified (internally equivalent to Approach 1) ----
+    pm1.pinMode(M5PM1_GPIO_NUM_0, M5PM1_OTHER);
+    LOGI("GPIO0 NeoPixel init: Approach 2 (simplified)");
+#endif
+
+    // setLedEnLevel() 主要用于 Stamp-S3Bat 产品，该产品使用默认的指示灯引脚作为RGB的供电引脚。
+    // 其他产品可根据硬件设计决定是否调用。默认保留以兼容 Stamp-S3Bat。
+    // setLedEnLevel() is mainly for the Stamp-S3Bat product, which uses the default indicator LED pin as the power supply pin for RGB.
+    // Other products may or may not need this depending on hardware design. Kept by default for Stamp-S3Bat compatibility.
     pm1.setLedEnLevel(true);
-    // 设置灯带数量（1-31）。
-    // Set LED count (1-31).
+
+    // 设置灯珠数量（1-32，固件最大支持32）。
+    // Set LED count (1-32, firmware max 32).
     pm1.setLedCount(LED_COUNT);
 
     LOGI("LED count: %u", LED_COUNT);
