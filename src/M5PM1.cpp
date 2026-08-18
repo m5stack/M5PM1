@@ -3249,21 +3249,16 @@ m5pm1_err_t M5PM1::read5VInOut(uint16_t* mv)
 // Power Management
 // ============================
 
-m5pm1_err_t M5PM1::getPowerSource(m5pm1_pwr_src_t* src)
+m5pm1_err_t M5PM1::getPowerSource(uint8_t* bitmap)
 {
-    if (src == nullptr) return M5PM1_ERR_INVALID_ARG;
+    if (bitmap == nullptr) return M5PM1_ERR_INVALID_ARG;
     if (!_initialized) {
         M5PM1_LOG_E(TAG_ADC, "Not initialized");
         return M5PM1_ERR_NOT_INIT;
     }
-    uint8_t val;
-    if (!_readReg(M5PM1_REG_PWR_SRC, &val)) return M5PM1_ERR_I2C_COMM;
-    *src = (m5pm1_pwr_src_t)(val & 0x07);
-    M5PM1_LOG_D(TAG_ADC, "Power source: %s",
-                (*src == 0)   ? "None"
-                : (*src == 1) ? "USB"
-                : (*src == 2) ? "Battery"
-                              : "Unknown");
+    if (!_readReg(M5PM1_REG_PWR_SRC, bitmap)) return M5PM1_ERR_I2C_COMM;
+    *bitmap &= 0x07;
+    M5PM1_LOG_D(TAG_ADC, "Power source bitmap: 0x%02X", *bitmap);
     return M5PM1_OK;
 }
 

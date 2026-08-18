@@ -104,10 +104,11 @@ typedef enum {
 // ---- 电源状态寄存器 ----
 // ---- Power Status Registers ----
 #define M5PM1_REG_PWR_SRC \
-    0x04  // R     [2:0] 当前供电源 / Power source
-          //       0: 5VIN（USB/DC输入） / 0: 5VIN (USB/DC input)
-          //       1: 5VINOUT（双向端口） / 1: 5VINOUT (bidirectional port)
-          //       2: 电池 / 2: BAT (battery)
+    0x04  // R     [2:0] 电源来源位图 / Power source bitmap
+          //       [2] BAT 有效 / BAT valid
+          //       [1] 5VINOUT 有效（5V 升压开启时为 0） / 5VINOUT valid (0 while 5V boost is enabled)
+          //       [0] 5VIN 有效 / 5VIN valid
+          //       多个电源来源可以同时有效 / Multiple power sources may be valid simultaneously
 #define M5PM1_REG_WAKE_SRC \
     0x05  // R/W   [6:0] 唤醒源标志（写0清除） / Wake source flags (write 0 to clear)
           //       [6] 5VINOUT插入唤醒 / 5VINOUT insertion wake
@@ -505,17 +506,14 @@ typedef enum {
 } m5pm1_pwm_channel_t;
 
 /**
- * @brief 当前供电源 / Current power source
+ * @brief 电源来源位掩码 / Power source bitmap
+ * @note 可组合使用 / Can be combined
  */
 typedef enum {
-    M5PM1_PWR_SRC_5VIN = 0,     // USB/DC 5V输入
-                                // USB/DC 5V input
-    M5PM1_PWR_SRC_5VINOUT = 1,  // 5V双向端口输入
-                                // 5V bidirectional port input
-    M5PM1_PWR_SRC_BAT = 2,      // 电池供电
-                                // Battery power
-    M5PM1_PWR_SRC_UNKNOWN = 3   // 未知/无供电
-                                // Unknown/no power
+    M5PM1_PWR_SRC_NONE    = 0x00,      // 无有效电源来源 / No valid power source
+    M5PM1_PWR_SRC_5VIN    = (1 << 0),  // USB/DC 5V 输入有效 / USB/DC 5V input valid
+    M5PM1_PWR_SRC_5VINOUT = (1 << 1),  // 5V 双向端口输入有效 / 5V bidirectional port input valid
+    M5PM1_PWR_SRC_BAT     = (1 << 2),  // 电池有效 / Battery valid
 } m5pm1_pwr_src_t;
 
 /**
@@ -1754,15 +1752,15 @@ public:
     // Power Management
     // ========================
     /**
-     * @brief 获取当前电源来源
-     *        Get current power source
-     * @param src 输出参数，存储电源来源：M5PM1_PWR_SRC_5VIN / M5PM1_PWR_SRC_5VINOUT / M5PM1_PWR_SRC_BAT /
-     * M5PM1_PWR_SRC_UNKNOWN Output parameter, stores power source: M5PM1_PWR_SRC_5VIN / M5PM1_PWR_SRC_5VINOUT /
-     * M5PM1_PWR_SRC_BAT / M5PM1_PWR_SRC_UNKNOWN
+     * @brief 获取 PWR_SRC 电源来源位图
+     *        Get the PWR_SRC power source bitmap
+     * @param bitmap 输出参数：[0]=5VIN 有效，[1]=5VINOUT 有效，[2]=BAT 有效
+     *               Output parameter: [0]=5VIN valid, [1]=5VINOUT valid, [2]=BAT valid
      * @return 成功返回 M5PM1_OK，否则返回错误码
      *         Return M5PM1_OK on success, error code otherwise
+     * @note 多个位可以同时置位 / Multiple bits may be set simultaneously
      */
-    m5pm1_err_t getPowerSource(m5pm1_pwr_src_t* src);
+    m5pm1_err_t getPowerSource(uint8_t* bitmap);
 
     /**
      * @brief 读取唤醒源
